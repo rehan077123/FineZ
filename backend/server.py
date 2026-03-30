@@ -1,0 +1,1489 @@
+from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, Header, UploadFile, File
+from dotenv import load_dotenv
+from starlette.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
+import os
+import logging
+import re
+import requests
+from urllib.parse import urlparse
+from pathlib import Path
+from pydantic import BaseModel, Field, ConfigDict, EmailStr
+from typing import List, Optional
+import uuid
+from datetime import datetime, timezone, timedelta
+import jwt
+import bcrypt
+from functools import lru_cache
+import base64
+from io import BytesIO
+
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / ".env")
+
+# JWT Configuration
+SECRET_KEY = os.environ.get("SECRET_KEY", "your-secret-key-change-in-production-finez-2024")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30 * 24  # 30 days
+
+# Image upload configuration
+UPLOAD_DIR = ROOT_DIR / "uploads" / "products"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+# MongoDB connection
+mongo_url = os.environ["MONGO_URI"]
+client = AsyncIOMotorClient(mongo_url)
+db = client[os.environ["DB_NAME"]]
+
+# Create the main app without a prefix
+app = FastAPI()
+
+# Create a router with the /api prefix
+api_router = APIRouter(prefix="/api")
+
+
+# ==================== AUTH UTILITIES ====================
+
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
+
+
+def create_access_token(user_id: str, expires_delta: Optional[timedelta] = None):
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(
+            minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+        )
+    to_encode = {"sub": user_id, "exp": expire}
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+async def get_current_user(authorization: Optional[str] = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing authorization header")
+    
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            raise HTTPException(status_code=401, detail="Invalid authentication scheme")
+        
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return user_id
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid authorization header format")
+
+
+# ==================== MODELS ====================
+
+# ==================== AUTH MODELS ====================
+
+
+class UserSignup(BaseModel):
+    email: EmailStr
+    password: str
+    first_name: str
+    last_name: str
+
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: dict
+
+
+class User(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    email: str
+    first_name: str
+    last_name: str
+    password_hash: str
+    phone: Optional[str] = None
+    profile_image: Optional[str] = None
+    bio: Optional[str] = None
+    seller: bool = False
+    verified: bool = False
+    account_balance: float = 0.0
+    total_earnings: float = 0.0
+    affiliate_commission_rate: float = 0.1
+    seller_tier: str = "free"  # free, pro, enterprise
+    tier_monthly_fee: float = 0.0
+    is_admin: bool = False  # Admin dashboard access
+    total_products: int = 0  # Track product count
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+
+
+class UserProfile(BaseModel):
+    id: str
+    email: str
+    first_name: str
+    last_name: str
+    phone: Optional[str] = None
+    profile_image: Optional[str] = None
+    bio: Optional[str] = None
+    seller: bool
+    verified: bool
+    account_balance: float
+    total_earnings: float
+    affiliate_commission_rate: float
+    created_at: datetime
+
+
+class Transaction(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    product_id: str
+    amount: float
+    transaction_type: str
+    status: str
+    payment_method: Optional[str] = None
+    transaction_number: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+
+
+class Purchase(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    product_id: str
+    quantity: int = 1
+    total_price: float
+    status: str = "completed"
+    purchased_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+
+
+class AffiliateEarning(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    affiliate_user_id: str
+    product_id: str
+    purchase_id: str
+    commission_amount: float
+    commission_rate: float
+    status: str = "pending"
+    earned_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+    paid_at: Optional[datetime] = None
+
+
+class Product(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str
+    description: str
+    why_this_product: str
+    price: Optional[float] = None
+    original_price: Optional[float] = None
+    category: str
+    subcategory: Optional[str] = None
+    type: str
+    affiliate_link: str
+    affiliate_network: Optional[str] = None
+    seller_id: Optional[str] = None
+    image_url: str
+    image_small: Optional[str] = None
+    image_full: Optional[str] = None
+    featured: bool = False
+    premium: bool = False
+    clicks: int = 0
+    rating: float = 0.0
+    review_count: int = 0
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ProductCreate(BaseModel):
+    title: str
+    description: str
+    why_this_product: str
+    price: Optional[float] = None
+    original_price: Optional[float] = None
+    category: str
+    subcategory: Optional[str] = None
+    type: str
+    affiliate_link: str
+    affiliate_network: Optional[str] = None
+    image_url: Optional[str] = None  # Optional if uploading image file
+    image_small: Optional[str] = None
+    image_full: Optional[str] = None
+    featured: bool = False
+    premium: bool = False
+
+
+class ProductUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    why_this_product: Optional[str] = None
+    price: Optional[float] = None
+    original_price: Optional[float] = None
+    category: Optional[str] = None
+    type: Optional[str] = None
+    affiliate_link: Optional[str] = None
+    affiliate_network: Optional[str] = None
+    image_url: Optional[str] = None
+    image_small: Optional[str] = None
+    image_full: Optional[str] = None
+    featured: Optional[bool] = None
+    premium: Optional[bool] = None
+
+
+class Stats(BaseModel):
+    total_listings: int
+    total_vendors: int
+    total_clicks: int
+    featured_count: int
+
+
+class NewsletterSubscription(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    email: str
+    subscribed_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+    active: bool = True
+
+
+class NewsletterSubscribe(BaseModel):
+    email: str
+
+
+class PageView(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    page: str
+    user_agent: Optional[str] = None
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+
+
+# ==================== NEW REVENUE MODELS ====================
+
+
+class SellerTier(BaseModel):
+    """Free, Pro, Enterprise tiers"""
+    tier_name: str  # free, pro, enterprise
+    monthly_fee: float  # 0, 29.99, 99.99
+    seller_commission_rate: float  # 10%, 15%, 20%
+    max_products: int  # 10, 100, unlimited (-1)
+    featured_slots: int  # 0, 5, 20
+    can_promote: bool
+    api_access: bool
+
+
+class WithdrawalRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    seller_id: str
+    amount: float
+    status: str = "pending"  # pending, approved, processing, completed, rejected
+    payment_method: str = "bank_transfer"  # bank_transfer, paypal, stripe_connect
+    bank_account: Optional[str] = None
+    requested_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    processed_at: Optional[datetime] = None
+    transaction_hash: Optional[str] = None
+
+
+class PlatformRevenue(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    source: str  # transaction_fee, tier_upgrade, featured_listing, withdrawal_fee
+    amount: float
+    seller_id: Optional[str] = None
+    purchase_id: Optional[str] = None
+    related_user: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class FeaturedListing(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    product_id: str
+    seller_id: str
+    cost: float  # 9.99 for 30 days, 24.99 for 90 days
+    position: int  # 1-10 position on homepage
+    duration_days: int  # 30 or 90
+    start_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    end_date: Optional[datetime] = None
+    is_active: bool = True
+
+
+class AdminMetrics(BaseModel):
+    """For admin dashboard"""
+    total_revenue: float
+    total_users: int
+    total_sellers: int
+    total_products: int
+    total_transactions: float
+    platform_earnings: float
+    affiliate_earnings: float
+    pending_withdrawals: float
+    avg_order_value: float
+
+
+# ==================== ROUTES ====================
+
+
+@api_router.get("/")
+async def root():
+    return {"message": "FineZ API - Your Money Making Platform"}
+
+
+# ==================== AUTH ROUTES ====================
+
+
+@api_router.post("/auth/signup", response_model=Token)
+async def signup(user_data: UserSignup):
+    existing_user = await db.users.find_one({"email": user_data.email})
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    user_obj = User(
+        email=user_data.email,
+        first_name=user_data.first_name,
+        last_name=user_data.last_name,
+        password_hash=hash_password(user_data.password),
+    )
+
+    user_doc = user_obj.model_dump()
+    user_doc["created_at"] = user_doc["created_at"].isoformat()
+    user_doc["updated_at"] = user_doc["updated_at"].isoformat()
+
+    await db.users.insert_one(user_doc)
+
+    access_token = create_access_token(user_obj.id)
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": user_obj.id,
+            "email": user_obj.email,
+            "first_name": user_obj.first_name,
+            "last_name": user_obj.last_name,
+        },
+    }
+
+
+@api_router.post("/auth/login", response_model=Token)
+async def login(credentials: UserLogin):
+    user = await db.users.find_one({"email": credentials.email})
+
+    if not user or not verify_password(credentials.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    access_token = create_access_token(user["id"])
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": user["id"],
+            "email": user["email"],
+            "first_name": user["first_name"],
+            "last_name": user["last_name"],
+        },
+    }
+
+
+@api_router.get("/auth/me", response_model=UserProfile)
+async def get_current_user_info(user_id: str = Depends(get_current_user)):
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if isinstance(user.get("created_at"), str):
+        user["created_at"] = datetime.fromisoformat(user["created_at"])
+    if isinstance(user.get("updated_at"), str):
+        user["updated_at"] = datetime.fromisoformat(user["updated_at"])
+
+    return user
+
+
+@api_router.post("/auth/logout")
+async def logout(user_id: str = Depends(get_current_user)):
+    return {"message": "Logged out successfully"}
+
+
+# ==================== USER ROUTES ====================
+
+
+@api_router.put("/users/{user_id}")
+async def update_user_profile(
+    user_id: str, update_data: dict, current_user: str = Depends(get_current_user)
+):
+    if user_id != current_user:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    updates = {k: v for k, v in update_data.items() if v is not None}
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    await db.users.update_one({"id": user_id}, {"$set": updates})
+
+    updated_user = await db.users.find_one({"id": user_id})
+    if isinstance(updated_user.get("created_at"), str):
+        updated_user["created_at"] = datetime.fromisoformat(
+            updated_user["created_at"]
+        )
+    if isinstance(updated_user.get("updated_at"), str):
+        updated_user["updated_at"] = datetime.fromisoformat(
+            updated_user["updated_at"]
+        )
+
+    return updated_user
+
+
+@api_router.get("/users/{user_id}/dashboard")
+async def get_user_dashboard(
+    user_id: str, current_user: str = Depends(get_current_user)
+):
+    if user_id != current_user:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    purchases = await db.purchases.find({"user_id": user_id}).to_list(100)
+    affiliate_earnings = await db.affiliate_earnings.find(
+        {"affiliate_user_id": user_id}
+    ).to_list(100)
+
+    total_purchases = len(purchases)
+    total_spent = sum(p.get("total_price", 0) for p in purchases)
+    pending_earnings = sum(
+        e.get("commission_amount", 0)
+        for e in affiliate_earnings
+        if e.get("status") == "pending"
+    )
+
+    return {
+        "user": user,
+        "total_purchases": total_purchases,
+        "total_spent": total_spent,
+        "account_balance": user.get("account_balance", 0),
+        "total_earnings": user.get("total_earnings", 0),
+        "pending_earnings": pending_earnings,
+        "recent_purchases": purchases[-5:] if purchases else [],
+    }
+
+
+# ==================== PRODUCT ROUTES ====================
+
+
+@api_router.get("/products")
+async def get_products(
+    search: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    type: Optional[str] = Query(None),
+    featured: Optional[bool] = Query(None),
+    new: Optional[bool] = Query(None),
+    limit: int = Query(100, le=100),
+    skip: int = Query(0),
+):
+    query = {}
+
+    if search:
+        query["$or"] = [
+            {"title": {"$regex": search, "$options": "i"}},
+            {"description": {"$regex": search, "$options": "i"}},
+            {"why_this_product": {"$regex": search, "$options": "i"}},
+        ]
+
+    if category and category.lower() != "all":
+        query["category"] = category
+
+    if type and type.lower() != "all":
+        query["type"] = type
+
+    if featured is not None:
+        query["featured"] = featured
+
+    if new is not None and new:
+        seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        query["created_at"] = {"$gte": seven_days_ago.isoformat()}
+
+    products = (
+        await db.products.find(query, {"_id": 0})
+        .sort("created_at", -1)
+        .skip(skip)
+        .limit(limit)
+        .to_list(limit)
+    )
+
+    # Convert datetime fields to strings for JSON serialization
+    result = []
+    for product in products:
+        if product.get("created_at") and not isinstance(product.get("created_at"), str):
+            product["created_at"] = product["created_at"].isoformat()
+        if product.get("updated_at") and not isinstance(product.get("updated_at"), str):
+            product["updated_at"] = product["updated_at"].isoformat()
+
+        result.append(product)
+
+    return result
+
+
+def _get_meta_value(html: str, property_names: list[str]) -> Optional[str]:
+    for prop in property_names:
+        match = re.search(rf'<meta[^>]+(?:property|name)=["\']{re.escape(prop)}["\'][^>]+content=["\']([^"\']+)["\']', html, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def _extract_price(html: str) -> Optional[float]:
+    match = re.search(r'"price"\s*:\s*"?([0-9]+(?:[.,][0-9]+)?)"?', html)
+    if match:
+        try:
+            return float(match.group(1).replace(',', ''))
+        except ValueError:
+            return None
+
+    match = re.search(r'(?:₹|Rs\.|USD|\$)\s*([0-9]+(?:[.,][0-9]+)?)', html)
+    if match:
+        try:
+            return float(match.group(1).replace(',', ''))
+        except ValueError:
+            return None
+
+    return None
+
+
+class ScrapeRequest(BaseModel):
+    affiliate_link: str
+
+
+@api_router.post('/products/scrape')
+async def scrape_product(request: ScrapeRequest):
+    affiliate_link = request.affiliate_link
+
+    if not affiliate_link:
+        raise HTTPException(status_code=400, detail='affiliate_link is required')
+
+    try:
+        parsed_url = urlparse(affiliate_link)
+    except Exception:
+        raise HTTPException(status_code=400, detail='Invalid affiliate link URL')
+
+    if not parsed_url.scheme.startswith('http') or not parsed_url.netloc:
+        raise HTTPException(status_code=400, detail='Invalid affiliate link URL')
+
+    # Basic allowed host check; allow major marketplaces
+    allowed_hosts = [
+        'amazon.com', 'www.amazon.com', 'amazon.in', 'www.amazon.in',
+        'flipkart.com', 'www.flipkart.com',
+        'aliexpress.com', 'www.aliexpress.com',
+        'shopee.sg', 'www.shopee.sg',
+        'ebay.com', 'www.ebay.com'
+    ]
+    if not any(parsed_url.netloc.lower().endswith(host) for host in allowed_hosts):
+        raise HTTPException(status_code=400, detail='Unsupported affiliate link host')
+
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9'
+        }
+        response = requests.get(affiliate_link, headers=headers, timeout=15)
+        response.raise_for_status()
+
+        html = response.text
+        title = _get_meta_value(html, ['og:title', 'twitter:title']) or re.search(r'<title>(.*?)</title>', html, re.IGNORECASE | re.DOTALL).group(1).strip() if re.search(r'<title>(.*?)</title>', html, re.IGNORECASE | re.DOTALL) else None
+        image_url = _get_meta_value(html, ['og:image', 'twitter:image', 'image'])
+
+        # Best effort for Big Amazon: find img tag fallback
+        if not image_url:
+            match = re.search(r'"imgTagWrapperId"\s*:\s*\{[^}]*"hiRes"\s*:\s*"([^"]+)"', html)
+            if match:
+                image_url = match.group(1)
+            else:
+                match2 = re.search(r'"image"\s*:\s*\"([^\"]+)\"', html)
+                if match2:
+                    image_url = match2.group(1)
+        
+        price = _extract_price(html)
+
+        image_small = image_url
+        image_full = image_url
+
+        return {
+            'title': title or '',
+            'description': '',
+            'why_this_product': '',
+            'price': price if price is not None else 0.0,
+            'image_url': image_url or '',
+            'image_small': image_small or '',
+            'image_full': image_full or '',
+            'affiliate_link': affiliate_link,
+            'affiliate_network': 'Amazon' if 'amazon.' in parsed_url.netloc else ('Flipkart' if 'flipkart.' in parsed_url.netloc else ''),
+        }
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail=f'Failed to request affiliate URL: {e}')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'Failed extracting data: {e}')
+
+
+@api_router.get("/products/featured", response_model=List[Product])
+async def get_featured_products(limit: int = Query(6, le=20)):
+    products = (
+        await db.products.find({"featured": True}, {"_id": 0})
+        .sort("clicks", -1)
+        .limit(limit)
+        .to_list(limit)
+    )
+
+    for product in products:
+        if isinstance(product.get("created_at"), str):
+            product["created_at"] = datetime.fromisoformat(
+                product["created_at"])
+        if isinstance(product.get("updated_at"), str):
+            product["updated_at"] = datetime.fromisoformat(
+                product["updated_at"])
+
+    return products
+
+
+@api_router.get("/products/{product_id}", response_model=Product)
+async def get_product(product_id: str):
+    product = await db.products.find_one({"id": product_id}, {"_id": 0})
+
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    if isinstance(product.get("created_at"), str):
+        product["created_at"] = datetime.fromisoformat(product["created_at"])
+    if isinstance(product.get("updated_at"), str):
+        product["updated_at"] = datetime.fromisoformat(product["updated_at"])
+
+    return product
+
+
+@api_router.post("/products", response_model=Product)
+async def create_product(product_input: ProductCreate, user_id: str = Depends(get_current_user)):
+    """Create a new product - requires authentication. Stores seller_id automatically."""
+    product_dict = product_input.model_dump()
+    product_dict["seller_id"] = user_id  # Automatically assign seller
+    product_obj = Product(**product_dict)
+
+    doc = product_obj.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    doc["updated_at"] = doc["updated_at"].isoformat()
+
+    result = await db.products.insert_one(doc)
+    
+    # Log product creation
+    await db.product_uploads.insert_one({
+        "product_id": product_obj.id,
+        "seller_id": user_id,
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        "title": product_obj.title
+    })
+    
+    return product_obj
+
+
+@api_router.put("/products/{product_id}", response_model=Product)
+async def update_product(product_id: str, product_update: ProductUpdate, user_id: str = Depends(get_current_user)):
+    """Update a product - requires authentication and ownership."""
+    existing = await db.products.find_one({"id": product_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Check ownership
+    if existing.get("seller_id") != user_id:
+        raise HTTPException(status_code=403, detail="You can only edit your own products")
+
+    update_data = {
+        k: v for k, v in product_update.model_dump().items() if v is not None
+    }
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    await db.products.update_one({"id": product_id}, {"$set": update_data})
+
+    updated_product = await db.products.find_one({"id": product_id}, {"_id": 0})
+    if isinstance(updated_product.get("created_at"), str):
+        updated_product["created_at"] = datetime.fromisoformat(
+            updated_product["created_at"]
+        )
+    if isinstance(updated_product.get("updated_at"), str):
+        updated_product["updated_at"] = datetime.fromisoformat(
+            updated_product["updated_at"]
+        )
+
+    return updated_product
+
+
+@api_router.delete("/products/{product_id}")
+async def delete_product(product_id: str, user_id: str = Depends(get_current_user)):
+    """Delete a product - requires authentication and ownership."""
+    existing = await db.products.find_one({"id": product_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Check ownership
+    if existing.get("seller_id") != user_id:
+        raise HTTPException(status_code=403, detail="You can only delete your own products")
+    
+    result = await db.products.delete_one({"id": product_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Log deletion
+    await db.product_uploads.insert_one({
+        "product_id": product_id,
+        "seller_id": user_id,
+        "deleted_at": datetime.now(timezone.utc).isoformat(),
+        "title": existing.get("title")
+    })
+    
+    return {"message": "Product deleted successfully"}
+
+
+@api_router.post("/products/upload")
+async def upload_product_with_image(
+    title: str = None,
+    description: str = None,
+    why_this_product: str = None,
+    category: str = None,
+    type: str = None,
+    affiliate_link: str = None,
+    affiliate_network: str = None,
+    price: float = None,
+    original_price: float = None,
+    featured: bool = False,
+    premium: bool = False,
+    image: UploadFile = File(None),
+    user_id: str = Depends(get_current_user)
+):
+    """Upload a product with image. Stores image in database as base64."""
+    # Validate required fields
+    if not all([title, description, why_this_product, category, type, affiliate_link]):
+        raise HTTPException(status_code=400, detail="Missing required product fields")
+    
+    image_url = None
+    
+    # Handle image upload
+    if image:
+        if image.content_type not in ALLOWED_IMAGE_TYPES:
+            raise HTTPException(status_code=400, detail=f"Invalid image type. Allowed: {ALLOWED_IMAGE_TYPES}")
+        
+        # Read image
+        image_data = await image.read()
+        if len(image_data) > MAX_IMAGE_SIZE:
+            raise HTTPException(status_code=400, detail=f"Image too large. Max size: {MAX_IMAGE_SIZE / 1024 / 1024}MB")
+        
+        # Convert to base64 for MongoDB storage
+        image_base64 = base64.b64encode(image_data).decode('utf-8')
+        image_url = f"data:{image.content_type};base64,{image_base64}"
+    
+    # Create product
+    product_dict = {
+        "id": str(uuid.uuid4()),
+        "title": title,
+        "description": description,
+        "why_this_product": why_this_product,
+        "category": category,
+        "type": type,
+        "affiliate_link": affiliate_link,
+        "affiliate_network": affiliate_network,
+        "price": price,
+        "original_price": original_price,
+        "image_url": image_url or "https://via.placeholder.com/300x300?text=No+Image",
+        "featured": featured,
+        "premium": premium,
+        "seller_id": user_id,
+        "clicks": 0,
+        "rating": 0.0,
+        "review_count": 0,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    product_obj = Product(**product_dict)
+    doc = product_obj.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    doc["updated_at"] = doc["updated_at"].isoformat()
+    
+    await db.products.insert_one(doc)
+    
+    # Log upload
+    await db.product_uploads.insert_one({
+        "product_id": product_obj.id,
+        "seller_id": user_id,
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        "title": title,
+        "has_image": image is not None
+    })
+    
+    return product_obj
+
+
+@api_router.get("/products/seller/{seller_id}")
+async def get_seller_products(seller_id: str):
+    """Get all products uploaded by a specific seller."""
+    products = await db.products.find({"seller_id": seller_id}, {"_id": 0}).to_list(None)
+    
+    for product in products:
+        if isinstance(product.get("created_at"), str):
+            product["created_at"] = datetime.fromisoformat(product["created_at"])
+        if isinstance(product.get("updated_at"), str):
+            product["updated_at"] = datetime.fromisoformat(product["updated_at"])
+    
+    return products
+
+
+@api_router.get("/my-products")
+async def get_my_products(user_id: str = Depends(get_current_user)):
+    """Get all products uploaded by the current user."""
+    products = await db.products.find({"seller_id": user_id}, {"_id": 0}).to_list(None)
+    
+    for product in products:
+        if isinstance(product.get("created_at"), str):
+            product["created_at"] = datetime.fromisoformat(product["created_at"])
+        if isinstance(product.get("updated_at"), str):
+            product["updated_at"] = datetime.fromisoformat(product["updated_at"])
+    
+    return products
+
+
+@api_router.post("/products/{product_id}/click")
+async def track_click(product_id: str):
+    result = await db.products.update_one({"id": product_id}, {"$inc": {"clicks": 1}})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return {"message": "Click tracked"}
+
+
+# ==================== PURCHASE ROUTES ====================
+
+
+class PurchaseRequest(BaseModel):
+    product_id: str
+    quantity: int = 1
+
+
+@api_router.post("/purchases")
+async def create_purchase(
+    purchase_req: PurchaseRequest, user_id: str = Depends(get_current_user)
+):
+    """Protected route: requires login to purchase"""
+    product = await db.products.find_one({"id": purchase_req.product_id})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    total_price = (product.get("price", 0) or 0) * purchase_req.quantity
+
+    purchase = Purchase(
+        user_id=user_id,
+        product_id=purchase_req.product_id,
+        quantity=purchase_req.quantity,
+        total_price=total_price,
+    )
+
+    purchase_doc = purchase.model_dump()
+    purchase_doc["purchased_at"] = purchase_doc["purchased_at"].isoformat()
+
+    await db.purchases.insert_one(purchase_doc)
+
+    transaction = Transaction(
+        user_id=user_id,
+        product_id=purchase_req.product_id,
+        amount=total_price,
+        transaction_type="purchase",
+        status="completed",
+    )
+
+    transaction_doc = transaction.model_dump()
+    transaction_doc["created_at"] = transaction_doc["created_at"].isoformat()
+    transaction_doc["updated_at"] = transaction_doc["updated_at"].isoformat()
+
+    await db.transactions.insert_one(transaction_doc)
+
+    await db.products.update_one(
+        {"id": purchase_req.product_id}, {"$inc": {"clicks": 1}}
+    )
+
+    if product.get("seller_id"):
+        seller = await db.users.find_one({"id": product.get("seller_id")})
+        if seller:
+            commission_rate = seller.get("affiliate_commission_rate", 0.1)
+            commission_amount = total_price * commission_rate
+
+            affiliate_earning = AffiliateEarning(
+                affiliate_user_id=product.get("seller_id"),
+                product_id=purchase_req.product_id,
+                purchase_id=purchase.id,
+                commission_amount=commission_amount,
+                commission_rate=commission_rate,
+            )
+
+            affiliate_doc = affiliate_earning.model_dump()
+            affiliate_doc["earned_at"] = affiliate_doc["earned_at"].isoformat()
+            if affiliate_doc.get("paid_at"):
+                affiliate_doc["paid_at"] = affiliate_doc["paid_at"].isoformat()
+
+            await db.affiliate_earnings.insert_one(affiliate_doc)
+
+            await db.users.update_one(
+                {"id": product.get("seller_id")},
+                {"$inc": {"total_earnings": commission_amount}},
+            )
+
+    # Platform takes 5% transaction fee
+    platform_fee = total_price * 0.05
+    platform_revenue = PlatformRevenue(
+        source="transaction_fee",
+        amount=platform_fee,
+        seller_id=product.get("seller_id"),
+        purchase_id=purchase.id,
+    )
+    revenue_doc = platform_revenue.model_dump()
+    revenue_doc["created_at"] = revenue_doc["created_at"].isoformat()
+    await db.platform_revenue.insert_one(revenue_doc)
+
+    return {
+        "purchase_id": purchase.id,
+        "status": "completed",
+        "amount": total_price,
+        "platform_fee": platform_fee,
+        "message": "Purchase successful!",
+    }
+
+
+@api_router.get("/purchases")
+async def get_user_purchases(user_id: str = Depends(get_current_user)):
+    """Protected route: get user's purchases"""
+    purchases = await db.purchases.find({"user_id": user_id}).to_list(100)
+    return purchases
+
+
+@api_router.get("/purchases/{purchase_id}")
+async def get_purchase(
+    purchase_id: str, user_id: str = Depends(get_current_user)
+):
+    """Protected route: get specific purchase"""
+    purchase = await db.purchases.find_one({"id": purchase_id})
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Purchase not found")
+
+    if purchase.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    return purchase
+
+
+@api_router.get("/affiliate-earnings")
+async def get_affiliate_earnings(user_id: str = Depends(get_current_user)):
+    """Protected route: get user's affiliate earnings"""
+    earnings = await db.affiliate_earnings.find(
+        {"affiliate_user_id": user_id}
+    ).to_list(100)
+
+    total_pending = sum(
+        e.get("commission_amount", 0)
+        for e in earnings
+        if e.get("status") == "pending"
+    )
+    total_approved = sum(
+        e.get("commission_amount", 0)
+        for e in earnings
+        if e.get("status") == "approved"
+    )
+    total_paid = sum(
+        e.get("commission_amount", 0) for e in earnings if e.get("status") == "paid"
+    )
+
+    return {
+        "earnings": earnings,
+        "summary": {
+            "total_pending": total_pending,
+            "total_approved": total_approved,
+            "total_paid": total_paid,
+            "total_earned": total_pending + total_approved + total_paid,
+        },
+    }
+
+
+@api_router.get("/stats", response_model=Stats)
+async def get_stats():
+    total_listings = await db.products.count_documents({})
+
+    total_vendors = max(1, total_listings // 5)
+
+    pipeline = [{"$group": {"_id": None, "total": {"$sum": "$clicks"}}}]
+    result = await db.products.aggregate(pipeline).to_list(1)
+    total_clicks = result[0]["total"] if result else 0
+
+    featured_count = await db.products.count_documents({"featured": True})
+
+    return Stats(
+        total_listings=total_listings,
+        total_vendors=total_vendors,
+        total_clicks=total_clicks,
+        featured_count=featured_count,
+    )
+
+
+@api_router.get("/categories")
+async def get_categories():
+    return {
+        "categories": [
+            "All",
+            "AI Tools",
+            "Tech",
+            "Side Hustles",
+            "Fashion",
+            "Learn",
+            "Fitness",
+            "Home",
+        ],
+        "types": ["all", "affiliate", "marketplace", "dropshipping", "idea"],
+    }
+
+
+# ==================== NEWSLETTER ====================
+
+
+@api_router.post("/newsletter/subscribe")
+async def subscribe_newsletter(subscription: NewsletterSubscribe):
+    existing = await db.newsletter.find_one(
+        {"email": subscription.email, "active": True}
+    )
+    if existing:
+        return {"message": "Already subscribed", "status": "existing"}
+
+    sub_obj = NewsletterSubscription(email=subscription.email)
+    doc = sub_obj.model_dump()
+    doc["subscribed_at"] = doc["subscribed_at"].isoformat()
+
+    await db.newsletter.insert_one(doc)
+    return {"message": "Successfully subscribed!", "status": "new"}
+
+
+@api_router.get("/newsletter/count")
+async def get_newsletter_count():
+    count = await db.newsletter.count_documents({"active": True})
+    return {"count": count}
+
+
+# ==================== ANALYTICS ====================
+
+
+@api_router.post("/analytics/pageview")
+async def track_pageview(page: str):
+    view = PageView(page=page)
+    doc = view.model_dump()
+    doc["timestamp"] = doc["timestamp"].isoformat()
+    await db.pageviews.insert_one(doc)
+    return {"message": "Tracked"}
+
+
+@api_router.get("/analytics/stats")
+async def get_analytics():
+    total_pageviews = await db.pageviews.count_documents({})
+    newsletter_subs = await db.newsletter.count_documents({"active": True})
+
+    return {
+        "total_pageviews": total_pageviews,
+        "newsletter_subscribers": newsletter_subs,
+    }
+
+
+# ==================== SELLER TIER SYSTEM ====================
+
+
+TIER_CONFIGS = {
+    "free": {"fee": 0, "commission": 0.10, "max_products": 10, "featured_slots": 0},
+    "pro": {"fee": 29.99, "commission": 0.15, "max_products": 100, "featured_slots": 5},
+    "enterprise": {"fee": 99.99, "commission": 0.20, "max_products": -1, "featured_slots": 20},
+}
+
+
+@api_router.post("/seller/upgrade-tier")
+async def upgrade_seller_tier(
+    tier: str = "pro", user_id: str = Depends(get_current_user)
+):
+    """Upgrade to a paid seller tier"""
+    if tier not in TIER_CONFIGS:
+        raise HTTPException(status_code=400, detail="Invalid tier")
+
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    tier_config = TIER_CONFIGS[tier]
+    
+    # Update user tier
+    await db.users.update_one(
+        {"id": user_id},
+        {
+            "$set": {
+                "seller_tier": tier,
+                "seller": True,
+                "affiliate_commission_rate": tier_config["commission"],
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
+    )
+
+    # Log tier upgrade as platform revenue
+    if tier_config["fee"] > 0:
+        platform_revenue = PlatformRevenue(
+            source="tier_upgrade",
+            amount=tier_config["fee"],
+            seller_id=user_id,
+            related_user=user_id,
+        )
+        revenue_doc = platform_revenue.model_dump()
+        revenue_doc["created_at"] = revenue_doc["created_at"].isoformat()
+        await db.platform_revenue.insert_one(revenue_doc)
+
+    return {
+        "message": f"Upgraded to {tier} tier",
+        "tier": tier,
+        "commission_rate": tier_config["commission"],
+        "max_products": tier_config["max_products"],
+        "featured_slots": tier_config["featured_slots"],
+    }
+
+
+# ==================== WITHDRAWAL SYSTEM ====================
+
+
+@api_router.post("/withdrawals/request")
+async def request_withdrawal(
+    amount: float, payment_method: str = "bank_transfer", user_id: str = Depends(get_current_user)
+):
+    """Request withdrawal of affiliate earnings"""
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    available = user.get("total_earnings", 0)
+    min_withdrawal = 50
+
+    if amount < min_withdrawal:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Minimum withdrawal: ${min_withdrawal}",
+        )
+    if amount > available:
+        raise HTTPException(
+            status_code=400, detail=f"Insufficient balance. Available: ${available}"
+        )
+
+    withdrawal = WithdrawalRequest(
+        seller_id=user_id,
+        amount=amount,
+        payment_method=payment_method,
+    )
+
+    withdrawal_doc = withdrawal.model_dump()
+    withdrawal_doc["requested_at"] = withdrawal_doc["requested_at"].isoformat()
+    if withdrawal_doc.get("processed_at"):
+        withdrawal_doc["processed_at"] = withdrawal_doc["processed_at"].isoformat()
+
+    await db.withdrawals.insert_one(withdrawal_doc)
+
+    # Platform takes 2% fee
+    platform_fee = amount * 0.02
+    platform_revenue = PlatformRevenue(
+        source="withdrawal_fee", amount=platform_fee, seller_id=user_id
+    )
+    revenue_doc = platform_revenue.model_dump()
+    revenue_doc["created_at"] = revenue_doc["created_at"].isoformat()
+    await db.platform_revenue.insert_one(revenue_doc)
+
+    return {
+        "id": withdrawal.id,
+        "status": "pending",
+        "amount": amount,
+        "fee": platform_fee,
+        "net_amount": amount - platform_fee,
+        "message": "Withdrawal request submitted. We process within 3-5 business days.",
+    }
+
+
+@api_router.get("/withdrawals")
+async def get_my_withdrawals(user_id: str = Depends(get_current_user)):
+    """Get user's withdrawal history"""
+    withdrawals = await db.withdrawals.find({"seller_id": user_id}).to_list(None)
+    return withdrawals
+
+
+# ==================== FEATURED LISTINGS ====================
+
+
+@api_router.post("/featured/buy-slot")
+async def buy_featured_slot(
+    product_id: str, duration_days: int = 30, user_id: str = Depends(get_current_user)
+):
+    """Buy featured listing slot for a product"""
+    product = await db.products.find_one({"id": product_id})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    if product.get("seller_id") != user_id:
+        raise HTTPException(status_code=403, detail="You can only feature your own products")
+
+    # Featured slot pricing: $9.99/30 days, $24.99/90 days
+    pricing = {30: 9.99, 90: 24.99}
+    if duration_days not in pricing:
+        raise HTTPException(status_code=400, detail="Duration must be 30 or 90 days")
+
+    cost = pricing[duration_days]
+
+    # Create featured listing
+    featured = FeaturedListing(
+        product_id=product_id,
+        seller_id=user_id,
+        cost=cost,
+        duration_days=duration_days,
+    )
+
+    featured_doc = featured.model_dump()
+    featured_doc["start_date"] = featured_doc["start_date"].isoformat()
+    featured_doc["end_date"] = (
+        datetime.now(timezone.utc) + timedelta(days=duration_days)
+    ).isoformat()
+
+    await db.featured_listings.insert_one(featured_doc)
+
+    # Update product as featured
+    await db.products.update_one(
+        {"id": product_id}, {"$set": {"featured": True}}
+    )
+
+    # Log platform revenue
+    platform_revenue = PlatformRevenue(
+        source="featured_listing", amount=cost, seller_id=user_id, purchase_id=product_id
+    )
+    revenue_doc = platform_revenue.model_dump()
+    revenue_doc["created_at"] = revenue_doc["created_at"].isoformat()
+    await db.platform_revenue.insert_one(revenue_doc)
+
+    return {
+        "id": featured.id,
+        "status": "active",
+        "cost": cost,
+        "duration_days": duration_days,
+        "message": f"Product featured for {duration_days} days!",
+    }
+
+
+# ==================== ADMIN DASHBOARD ====================
+
+
+@api_router.get("/admin/dashboard", response_model=AdminMetrics)
+async def get_admin_dashboard(user_id: str = Depends(get_current_user)):
+    """Admin dashboard with platform metrics"""
+    # Check if user is admin
+    admin_user = await db.users.find_one({"id": user_id, "is_admin": True})
+    if not admin_user:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    # Get all metrics
+    total_users = await db.users.count_documents({})
+    total_sellers = await db.users.count_documents({"seller": True})
+    total_products = await db.products.count_documents({})
+    
+    purchases = await db.purchases.find({}).to_list(None)
+    total_transactions = sum(p.get("total_price", 0) for p in purchases)
+
+    # Platform earnings
+    platform_revenue = await db.platform_revenue.find({}).to_list(None)
+    platform_earnings = sum(r.get("amount", 0) for r in platform_revenue)
+
+    # Affiliate earnings
+    affiliate_earnings_docs = await db.affiliate_earnings.find({}).to_list(None)
+    total_affiliate_earnings = sum(
+        e.get("commission_amount", 0) for e in affiliate_earnings_docs
+    )
+
+    # Pending withdrawals
+    pending_withdrawals_docs = await db.withdrawals.find({"status": "pending"}).to_list(None)
+    pending_withdrawals = sum(
+        w.get("amount", 0) for w in pending_withdrawals_docs
+    )
+
+    avg_order_value = (
+        total_transactions / len(purchases) if purchases else 0
+    )
+
+    return AdminMetrics(
+        total_revenue=total_transactions + platform_earnings,
+        total_users=total_users,
+        total_sellers=total_sellers,
+        total_products=total_products,
+        total_transactions=total_transactions,
+        platform_earnings=platform_earnings,
+        affiliate_earnings=total_affiliate_earnings,
+        pending_withdrawals=pending_withdrawals,
+        avg_order_value=avg_order_value,
+    )
+
+
+@api_router.get("/admin/revenue/breakdown")
+async def get_revenue_breakdown(user_id: str = Depends(get_current_user)):
+    """Get detailed revenue breakdown"""
+    admin_user = await db.users.find_one({"id": user_id, "is_admin": True})
+    if not admin_user:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    pipeline = [
+        {"$group": {"_id": "$source", "total": {"$sum": "$amount"}, "count": {"$sum": 1}}}
+    ]
+
+    revenue_breakdown = await db.platform_revenue.aggregate(pipeline).to_list(None)
+
+    return {
+        "breakdown": revenue_breakdown,
+        "total": sum(r.get("total", 0) for r in revenue_breakdown),
+    }
+
+
+@api_router.get("/admin/top-sellers")
+async def get_top_sellers(limit: int = 10, user_id: str = Depends(get_current_user)):
+    """Get top earning sellers"""
+    admin_user = await db.users.find_one({"id": user_id, "is_admin": True})
+    if not admin_user:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    top_sellers = (
+        await db.users.find({"seller": True})
+        .sort("total_earnings", -1)
+        .limit(limit)
+        .to_list(limit)
+    )
+
+    return top_sellers
+
+
+@api_router.get("/admin/withdrawals/pending")
+async def get_pending_withdrawals(user_id: str = Depends(get_current_user)):
+    """Get all pending withdrawal requests"""
+    admin_user = await db.users.find_one({"id": user_id, "is_admin": True})
+    if not admin_user:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    pending = await db.withdrawals.find({"status": "pending"}).to_list(None)
+    total_pending = sum(w.get("amount", 0) for w in pending)
+
+    return {"pending_requests": pending, "total_pending_amount": total_pending}
+
+
+@api_router.post("/admin/withdrawals/{withdrawal_id}/approve")
+async def approve_withdrawal(
+    withdrawal_id: str, user_id: str = Depends(get_current_user)
+):
+    """Admin approves a withdrawal"""
+    admin_user = await db.users.find_one({"id": user_id, "is_admin": True})
+    if not admin_user:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    withdrawal = await db.withdrawals.find_one({"id": withdrawal_id})
+    if not withdrawal:
+        raise HTTPException(status_code=404, detail="Withdrawal not found")
+
+    await db.withdrawals.update_one(
+        {"id": withdrawal_id},
+        {
+            "$set": {
+                "status": "approved",
+                "processed_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
+    )
+
+    return {"message": "Withdrawal approved", "id": withdrawal_id}
+
+
+# ==================== PLATFORM STATS ====================
+
+
+@api_router.get("/platform/stats")
+async def get_platform_stats():
+    """Public platform statistics"""
+    total_users = await db.users.count_documents({})
+    total_products = await db.products.count_documents({})
+    total_sellers = await db.users.count_documents({"seller": True})
+
+    purchases = await db.purchases.find({}).to_list(None)
+    total_revenue = sum(p.get("total_price", 0) for p in purchases)
+
+    platform_revenue = await db.platform_revenue.find({}).to_list(None)
+    platform_earnings = sum(r.get("amount", 0) for r in platform_revenue)
+
+    return {
+        "total_users": total_users,
+        "total_products": total_products,
+        "total_sellers": total_sellers,
+        "total_revenue": total_revenue,
+        "platform_earnings": platform_earnings,
+        "total_ecosystem_value": total_revenue + platform_earnings,
+    }
+
+
+# ==================== APP CONFIG ====================
+
+
+app.include_router(api_router)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    client.close()

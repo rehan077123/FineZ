@@ -1,0 +1,106 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-[#0F172A] text-white;
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  ::-webkit-scrollbar {
+    width: 10px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-[#1E293B];
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-[#1E40AF] rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-[#2563EB];
+  }
+}
+
+@layer components {
+  .trust-blue-gradient {
+    background: linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%);
+  }
+  
+  .gold-gradient {
+    background: linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%);
+  }
+  
+  .glass-effect {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10;
+  }
+  
+  .product-card-hover {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .product-card-hover:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 20px 60px -15px rgba(30, 64, 175, 0.5);
+  }
+  
+  .btn-primary {
+    @apply bg-gradient-to-r from-[#1E40AF] to-[#3B82F6] hover:from-[#1E3A8A] hover:to-[#2563EB] text-white font-semibold px-6 py-3 rounded-xl transition-all duration-300 shadow-lg shadow-blue-500/50 hover:shadow-xl hover:shadow-blue-600/60;
+  }
+  
+  .btn-gold {
+    @apply bg-gradient-to-r from-[#F59E0B] to-[#FBBF24] hover:from-[#D97706] hover:to-[#F59E0B] text-white font-bold px-8 py-4 rounded-xl transition-all duration-300 shadow-lg shadow-amber-500/50 hover:shadow-xl hover:shadow-amber-600/60;
+  }
+  
+  .masonry-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-gap: 1.5rem;
+    grid-auto-flow: dense;
+  }
+  
+  .masonry-item {
+    break-inside: avoid;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.6s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.8s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
