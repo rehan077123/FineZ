@@ -5,6 +5,12 @@
   "workspaces": [
     "frontend"
   ],
+  "resolutions": {
+    "glob": "^10.3.10",
+    "rimraf": "^5.0.5",
+    "abab": "2.0.6",
+    "sourcemap-codec": "^1.4.8"
+  },
   "description": "",
   "main": "index.js",
   "directories": {
