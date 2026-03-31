@@ -7,8 +7,8 @@
     "frontend"
   ],
   "resolutions": {
-    "glob": "^11.0.0",
-    "rimraf": "^6.0.0",
+    "glob": "10.4.5",
+    "rimraf": "5.0.10",
     "abab": "2.0.6",
     "sourcemap-codec": "^1.4.8",
     "@humanwhocodes/config-array": "0.13.0",
@@ -29,7 +29,8 @@
     "workbox-precaching": "^7.0.0",
     "workbox-strategies": "^7.0.0",
     "workbox-navigation-preload": "^7.0.0",
-    "workbox-cacheable-response": "^7.0.0"
+    "workbox-cacheable-response": "^7.0.0",
+    "webpack": "^5.91.0"
   },
   "description": "",
   "main": "index.js",
@@ -52,5 +53,8 @@
   "bugs": {
     "url": "https://github.com/rehan077123/FineZ./issues"
   },
-  "homepage": "https://github.com/rehan077123/FineZ.#readme"
+  "homepage": "https://github.com/rehan077123/FineZ.#readme",
+  "devDependencies": {
+    "@babel/core": "^7.24.0"
+  }
 }
