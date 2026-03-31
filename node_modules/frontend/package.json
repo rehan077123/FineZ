@@ -1,7 +1,7 @@
 {
+  "private": true,
   "name": "frontend",
   "version": "0.1.0",
-  "private": true,
   "dependencies": {
     "@hookform/resolvers": "^5.0.1",
     "@humanwhocodes/config-array": "^0.13.0",
