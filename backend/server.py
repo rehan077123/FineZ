@@ -33,9 +33,13 @@ MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 # MongoDB connection
-mongo_url = os.environ["MONGO_URI"]
+mongo_url = os.environ.get("MONGO_URI")
+if not mongo_url:
+    logger.error("MONGO_URI environment variable is not set!")
+    raise ValueError("MONGO_URI is required")
+
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ["DB_NAME"]]
+db = client[os.environ.get("DB_NAME", "finez_db")]
 
 # Create the main app without a prefix
 app = FastAPI()
@@ -1487,3 +1491,9 @@ logger = logging.getLogger(__name__)
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("server:app", host="0.0.0.0", port=port)
