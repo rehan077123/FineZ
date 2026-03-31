@@ -12,7 +12,13 @@
     "abab": "2.0.6",
     "sourcemap-codec": "^1.4.8",
     "@humanwhocodes/config-array": "0.13.0",
-    "@humanwhocodes/object-schema": "2.0.3"
+    "@humanwhocodes/object-schema": "2.0.3",
+    "svgo": "^2.8.0",
+    "domexception": "^4.0.0",
+    "w3c-hr-time": "^1.0.2",
+    "whatwg-encoding": "^2.0.0",
+    "inflight": "1.0.6",
+    "stable": "0.1.8"
   },
   "description": "",
   "main": "index.js",
