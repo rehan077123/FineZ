@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search, TrendingUp, Zap, Package, Lightbulb, ShoppingCart, Link as LinkIcon, ArrowUpDown } from 'lucide-react';
+import { Search, TrendingUp, Zap, Package, Lightbulb, ShoppingCart, Link as LinkIcon, ArrowUpDown, Star, Flame, Trophy } from 'lucide-react';
 import ProductCard from '@/components/ProductCard';
 import NewsletterModal from '@/components/NewsletterModal';
 import WhatsAppButton from '@/components/WhatsAppButton';
+import TestimonialSlider from '@/components/TestimonialSlider';
+import BestPicks from '@/components/BestPicks';
 import { api } from '@/utils/api';
 
 const HomePage = () => {
@@ -191,7 +193,7 @@ const HomePage = () => {
             <div>
               <div className="flex items-center space-x-3 mb-2">
                 <TrendingUp className="w-8 h-8 text-amber-400" />
-                <h2 className="text-3xl font-bold text-white">Top Picks</h2>
+                <h2 className="text-3xl font-bold text-white">Top Picks of the Week</h2>
               </div>
               <p className="text-gray-400">⚡ Curated by experts - Most popular money-making tools</p>
             </div>
@@ -204,6 +206,9 @@ const HomePage = () => {
           </div>
         </section>
       )}
+
+      {/* Testimonials */}
+      <TestimonialSlider />
       
       {/* Category Filters */}
       <section className="max-w-7xl mx-auto px-4 mb-8">
@@ -262,6 +267,12 @@ const HomePage = () => {
           </div>
         )}
       </section>
+
+      {/* Best Picks of the Week Section */}
+      <BestPicks products={featuredProducts} />
+
+      {/* Testimonials */}
+      <TestimonialSlider />
       
       {/* Trust Element */}
       <section className="max-w-4xl mx-auto px-4 mb-16">

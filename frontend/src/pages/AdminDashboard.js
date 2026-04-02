@@ -1,170 +1,181 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
+import { 
+  TrendingUp, 
+  Package, 
+  DollarSign, 
+  Users, 
+  ShieldCheck, 
+  Trash2, 
+  AlertCircle, 
+  CheckCircle,
+  FileText,
+  MessageSquare
+} from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
 
-export default function AdminDashboard() {
+const AdminDashboard = () => {
   const { token, user } = useAuth();
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [topSellers, setTopSellers] = useState([]);
-  const [withdrawals, setWithdrawals] = useState([]);
+  const [pendingProducts, setPendingProducts] = useState([]);
+  const [reports, setReports] = useState([]);
 
-  useEffect(() => {
-    fetchDashboardData();
+  const fetchAdminData = useCallback(async () => {
+    try {
+      const headers = { Authorization: `Bearer ${token}` };
+      const [metricsRes, productsRes] = await Promise.all([
+        axios.get(`${BACKEND_URL}/api/admin/dashboard`, { headers }),
+        axios.get(`${BACKEND_URL}/api/admin/products/pending`, { headers })
+      ]);
+      setMetrics(metricsRes.data);
+      setPendingProducts(productsRes.data);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error:', error);
+      setLoading(false);
+    }
   }, [token]);
 
-  const fetchDashboardData = async () => {
+  const handleApprove = async (productId) => {
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      
-      const [metricsRes, sellersRes, withdrawalsRes] = await Promise.all([
-        axios.get(`${BACKEND_URL}/api/admin/dashboard`, { headers }),
-        axios.get(`${BACKEND_URL}/api/admin/top-sellers`, { headers }),
-        axios.get(`${BACKEND_URL}/api/admin/withdrawals/pending`, { headers })
-      ]);
-
-      setMetrics(metricsRes.data);
-      setTopSellers(sellersRes.data);
-      setWithdrawals(withdrawalsRes.data.pending_requests);
-      setLoading(false);
+      await axios.post(`${BACKEND_URL}/api/admin/products/${productId}/approve`, {}, { headers });
+      setPendingProducts(prev => prev.filter(p => p.id !== productId));
     } catch (error) {
-      console.error('Error fetching admin data:', error);
-      setLoading(false);
+      console.error('Approval failed:', error);
+      alert('Failed to approve product');
     }
   };
 
-  const approveWithdrawal = async (withdrawalId) => {
+  const handleReject = async (productId) => {
+    if (!window.confirm('Are you sure you want to reject and delete this product?')) return;
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      await axios.post(`${BACKEND_URL}/api/admin/withdrawals/${withdrawalId}/approve`, {}, { headers });
-      fetchDashboardData();
+      await axios.delete(`${BACKEND_URL}/api/admin/products/${productId}`, { headers });
+      setPendingProducts(prev => prev.filter(p => p.id !== productId));
     } catch (error) {
-      console.error('Error approving withdrawal:', error);
+      console.error('Rejection failed:', error);
+      alert('Failed to delete product');
     }
   };
 
-  if (loading) return <div className="p-8 text-center">Loading...</div>;
-  if (!metrics) return <div className="p-8 text-center text-red-600">Admin access required</div>;
+  useEffect(() => {
+    fetchAdminData();
+  }, [fetchAdminData]);
+
+  if (loading) return <div className="p-20 text-center text-white">Loading Admin...</div>;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-8">
-      <h1 className="text-4xl font-bold text-white mb-8">💰 Platform Admin Dashboard</h1>
+    <div className="min-h-screen bg-[#0a0a0a] text-white p-8">
+      <div className="max-w-7xl mx-auto">
+        <header className="mb-12 flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl font-black mb-2">Platform Command Center</h1>
+            <p className="text-gray-400">Moderation, Analytics & Global Controls</p>
+          </div>
+          <div className="flex items-center space-x-2 px-4 py-2 bg-red-500/10 border border-red-500/30 rounded-full">
+            <ShieldCheck className="text-red-500 w-4 h-4" />
+            <span className="text-xs font-bold text-red-500 uppercase">Admin Mode Active</span>
+          </div>
+        </header>
 
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <MetricCard
-          title="Total Revenue"
-          value={`$${metrics.total_revenue.toFixed(2)}`}
-          color="from-blue-500 to-blue-600"
-        />
-        <MetricCard
-          title="Platform Earnings"
-          value={`$${metrics.platform_earnings.toFixed(2)}`}
-          color="from-green-500 to-green-600"
-        />
-        <MetricCard
-          title="Active Users"
-          value={metrics.total_users}
-          color="from-purple-500 to-purple-600"
-        />
-        <MetricCard
-          title="Total Products"
-          value={metrics.total_products}
-          color="from-orange-500 to-orange-600"
-        />
-      </div>
+        {/* Moderation Queue */}
+        <div className="grid lg:grid-cols-3 gap-8 mb-12">
+          <div className="lg:col-span-2 space-y-8">
+            <section className="glass-effect rounded-3xl border border-white/10 overflow-hidden">
+              <div className="p-6 border-b border-white/10 flex justify-between items-center">
+                <h3 className="text-xl font-bold flex items-center">
+                  <AlertCircle className="text-amber-400 mr-2" />
+                  Product Moderation Queue
+                </h3>
+                <span className="bg-amber-400 text-black text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+                  {pendingProducts.length} Pending
+                </span>
+              </div>
+              <div className="p-6">
+                {pendingProducts.length > 0 ? (
+                  <div className="space-y-4">
+                    {pendingProducts.map(p => (
+                      <div key={p.id} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                        <div className="flex items-center space-x-4">
+                          <img src={p.image_url} alt="" className="w-12 h-12 rounded-lg object-cover" />
+                          <div>
+                            <h4 className="font-bold">{p.title}</h4>
+                            <p className="text-xs text-gray-500">By Seller: {p.seller_id}</p>
+                          </div>
+                        </div>
+                        <div className="flex space-x-2">
+                          <button 
+                            onClick={() => handleApprove(p.id)}
+                            className="p-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 transition-all"
+                            title="Approve Listing"
+                          >
+                            <CheckCircle size={18} />
+                          </button>
+                          <button 
+                            onClick={() => handleReject(p.id)}
+                            className="p-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-all"
+                            title="Delete Listing"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-center text-gray-500 py-10">Queue is clean! No pending products.</p>
+                )}
+              </div>
+            </section>
 
-      {/* Secondary Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <MetricCard
-          title="Active Sellers"
-          value={metrics.total_sellers}
-          subtitle="Tier-verified sellers"
-          color="from-pink-500 to-pink-600"
-        />
-        <MetricCard
-          title="Avg Order Value"
-          value={`$${metrics.avg_order_value.toFixed(2)}`}
-          color="from-cyan-500 to-cyan-600"
-        />
-        <MetricCard
-          title="Pending Withdrawals"
-          value={`$${metrics.pending_withdrawals.toFixed(2)}`}
-          color="from-red-500 to-red-600"
-        />
-      </div>
+            <div className="grid grid-cols-2 gap-8">
+              <AdminToolCard icon={<MessageSquare />} title="Review Moderation" desc="Handle reported reviews" count={4} />
+              <AdminToolCard icon={<FileText />} title="Blog Approval" desc="Approve team/user blogs" count={2} />
+            </div>
+          </div>
 
-      {/* Top Sellers */}
-      <div className="bg-slate-700 rounded-lg p-6 mb-8 shadow-lg">
-        <h2 className="text-2xl font-bold text-white mb-4">🏆 Top Earning Sellers</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-white">
-            <thead>
-              <tr className="border-b border-slate-600">
-                <th className="text-left p-3">Seller</th>
-                <th className="text-left p-3">Total Earnings</th>
-                <th className="text-left p-3">Tier</th>
-                <th className="text-left p-3">Products</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topSellers.map((seller, idx) => (
-                <tr key={idx} className="border-b border-slate-600 hover:bg-slate-600">
-                  <td className="p-3">{seller.first_name} {seller.last_name}</td>
-                  <td className="p-3 font-bold">${seller.total_earnings.toFixed(2)}</td>
-                  <td className="p-3">
-                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                      seller.seller_tier === 'free' ? 'bg-gray-500' :
-                      seller.seller_tier === 'pro' ? 'bg-blue-500' :
-                      'bg-gold-500'
-                    }`}>
-                      {seller.seller_tier.toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="p-3">{seller.total_products}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <aside className="space-y-8">
+            <section className="glass-effect rounded-3xl border border-white/10 p-6">
+              <h3 className="text-lg font-bold mb-6">Platform Vitals</h3>
+              <div className="space-y-4">
+                <VitalStat label="Total Users" value={metrics?.total_users || 0} icon={<Users />} />
+                <VitalStat label="Active Listings" value={metrics?.total_products || 0} icon={<Package />} />
+                <VitalStat label="Global Revenue" value={`$${metrics?.total_revenue?.toFixed(2) || 0}`} icon={<DollarSign />} />
+                <VitalStat label="Ecosystem Value" value="+12%" icon={<TrendingUp />} trend="up" />
+              </div>
+            </section>
+          </aside>
         </div>
       </div>
+    </div>
+  );
+};
 
-      {/* Pending Withdrawals */}
-      <div className="bg-slate-700 rounded-lg p-6 shadow-lg">
-        <h2 className="text-2xl font-bold text-white mb-4">💳 Pending Withdrawals</h2>
-        {withdrawals.length === 0 ? (
-          <p className="text-slate-300">No pending withdrawals</p>
-        ) : (
-          <div className="space-y-4">
-            {withdrawals.map((w) => (
-              <div key={w.id} className="bg-slate-600 p-4 rounded-lg flex justify-between items-center">
-                <div>
-                  <p className="text-white font-semibold">${w.amount.toFixed(2)}</p>
-                  <p className="text-slate-300 text-sm">Requested: {new Date(w.requested_at).toLocaleDateString()}</p>
-                </div>
-                <button
-                  onClick={() => approveWithdrawal(w.id)}
-                  className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-semibold"
-                >
-                  Approve
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+const AdminToolCard = ({ icon, title, desc, count }) => (
+  <div className="glass-effect p-6 rounded-3xl border border-white/10 hover:border-blue-500/30 transition-all cursor-pointer group">
+    <div className="flex justify-between items-start mb-4">
+      <div className="p-3 bg-white/5 rounded-xl text-blue-400 group-hover:scale-110 transition-transform">
+        {icon}
       </div>
+      <span className="text-xs font-black text-blue-400 bg-blue-400/10 px-2 py-1 rounded-md">{count}</span>
     </div>
-  );
-}
+    <h4 className="font-bold mb-1">{title}</h4>
+    <p className="text-xs text-gray-500">{desc}</p>
+  </div>
+);
 
-function MetricCard({ title, value, subtitle, color }) {
-  return (
-    <div className={`bg-gradient-to-br ${color} rounded-lg p-6 text-white shadow-lg`}>
-      <p className="text-sm opacity-90 mb-2">{title}</p>
-      <p className="text-3xl font-bold">{value}</p>
-      {subtitle && <p className="text-xs opacity-75 mt-2">{subtitle}</p>}
+const VitalStat = ({ label, value, icon, trend }) => (
+  <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+    <div className="flex items-center space-x-3">
+      <div className="text-gray-400">{icon}</div>
+      <span className="text-sm font-medium text-gray-300">{label}</span>
     </div>
-  );
-}
+    <span className={`font-bold ${trend === 'up' ? 'text-green-400' : 'text-white'}`}>{value}</span>
+  </div>
+);
+
+export default AdminDashboard;

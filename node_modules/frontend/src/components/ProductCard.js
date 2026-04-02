@@ -1,5 +1,6 @@
-import { ExternalLink, Star, TrendingUp, Award, ShoppingCart } from 'lucide-react';
+import { ExternalLink, Star, TrendingUp, Award, ShoppingCart, Heart, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import { api } from '@/utils/api';
 import SocialShare from '@/components/SocialShare';
 
@@ -16,6 +17,25 @@ const DEFAULT_IMAGES = {
 
 const ProductCard = ({ product }) => {
   const navigate = useNavigate();
+  const [isSaved, setIsSaved] = useState(false);
+
+  useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem('savedProducts') || '[]');
+    setIsSaved(saved.includes(product.id));
+  }, [product.id]);
+
+  const toggleSave = (e) => {
+    e.stopPropagation();
+    const saved = JSON.parse(localStorage.getItem('savedProducts') || '[]');
+    let newSaved;
+    if (isSaved) {
+      newSaved = saved.filter(id => id !== product.id);
+    } else {
+      newSaved = [...saved, product.id];
+    }
+    localStorage.setItem('savedProducts', JSON.stringify(newSaved));
+    setIsSaved(!isSaved);
+  };
 
   const getImageUrl = () => {
     const imageUrl = product.image_small || product.image_url;
@@ -29,6 +49,11 @@ const ProductCard = ({ product }) => {
     try {
       await api.trackClick(product.id);
       window.open(product.affiliate_link, '_blank', 'noopener,noreferrer');
+      
+      // Track as recently viewed
+      const viewed = JSON.parse(localStorage.getItem('recentlyViewed') || '[]');
+      const newViewed = [product.id, ...viewed.filter(id => id !== product.id)].slice(0, 10);
+      localStorage.setItem('recentlyViewed', JSON.stringify(newViewed));
     } catch (error) {
       console.error('Error tracking click:', error);
       window.open(product.affiliate_link, '_blank', 'noopener,noreferrer');
@@ -42,6 +67,13 @@ const ProductCard = ({ product }) => {
     if (product.type === 'dropshipping') return 'Source Now 📦';
     return 'View Details →';
   };
+
+  const getUrgencyLabel = () => {
+    if (product.featured) return '🔥 Trending Now';
+    if (product.rating > 4.7) return '⭐ Best Seller';
+    if (product.review_count > 500) return '👀 High Demand';
+    return null;
+  };
   
   const handleCTAClick = (e) => {
     e.stopPropagation();
@@ -53,6 +85,7 @@ const ProductCard = ({ product }) => {
       <div 
         data-testid={`product-card-${product.id}`}
         className="product-card product-card-hover masonry-item animate-fade-in group cursor-pointer"
+        onClick={() => navigate(`/product/${product.id}`)}
       >
         {/* Badges */}
         {product.premium && (
@@ -67,6 +100,29 @@ const ProductCard = ({ product }) => {
             TOP PICK
           </div>
         )}
+        
+        {/* Urgency Label */}
+        {getUrgencyLabel() && (
+          <div className="absolute top-2 left-2 z-20 bg-amber-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg">
+            {getUrgencyLabel()}
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="absolute top-2 right-2 z-20 flex flex-col space-y-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button 
+            onClick={toggleSave}
+            className={`p-2 rounded-full shadow-lg transition-all ${isSaved ? 'bg-red-500 text-white' : 'bg-white/10 backdrop-blur-md text-white hover:bg-white/20'}`}
+          >
+            <Heart size={16} fill={isSaved ? "currentColor" : "none"} />
+          </button>
+          <button 
+            onClick={(e) => { e.stopPropagation(); navigate(`/product/${product.id}`); }}
+            className="p-2 rounded-full bg-white/10 backdrop-blur-md text-white hover:bg-white/20 shadow-lg transition-all"
+          >
+            <Eye size={16} />
+          </button>
+        </div>
         
         {/* Image */}
         <div className="relative overflow-hidden bg-gray-800">

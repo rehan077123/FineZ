@@ -22,6 +22,7 @@ const SellPage = () => {
   const [loading, setLoading] = useState(false);
   const [fetchingMeta, setFetchingMeta] = useState(false);
   const [metaMessage, setMetaMessage] = useState('');
+  const [showPricing, setShowPricing] = useState(false);
   
   const baseListingTypes = [
     {
@@ -76,6 +77,12 @@ const SellPage = () => {
   const listingTypes = user?.is_admin ? [...baseListingTypes, blogListingType] : baseListingTypes;
   
   const categories = ['AI Tools', 'Tech', 'Side Hustles', 'Fashion', 'Learn', 'Fitness', 'Home'];
+  
+  const b2bPlans = [
+    { name: 'Free', price: '$0', features: ['10 listings', 'Basic analytics', 'Standard support'], color: 'slate' },
+    { name: 'Pro', price: '$29', features: ['100 listings', 'Advanced analytics', 'Priority support', 'Featured slots'], color: 'blue', recommended: true },
+    { name: 'Enterprise', price: '$99', features: ['Unlimited listings', 'Custom branding', 'Dedicated manager', 'API access'], color: 'purple' }
+  ];
   
   const getColorClasses = (color) => {
     const colors = {
@@ -171,16 +178,24 @@ const SellPage = () => {
     );
   }
   
-  if (!selectedType) {
+  if (!selectedType && !showPricing) {
     return (
       <div className="min-h-screen py-12 px-4">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="text-center mb-16">
-            <h1 className="text-5xl font-bold text-white mb-4">Start Earning Today</h1>
-            <p className="text-xl text-gray-400 mb-2">
-              Choose how you want to list on FineZ. All listings are free. You keep your earnings.
+            <h1 className="text-5xl font-bold text-white mb-4">Grow Your Business on FineZ</h1>
+            <p className="text-xl text-gray-400 max-w-2xl mx-auto">
+              Choose how you want to list and start earning from our 50k+ monthly visitors.
             </p>
+            <div className="mt-8 flex justify-center space-x-4">
+              <button 
+                onClick={() => setShowPricing(true)}
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-600/30"
+              >
+                View B2B Pricing Plans
+              </button>
+            </div>
             <div className="flex items-center justify-center space-x-6 text-sm text-gray-500 mt-4">
               <span>✅ Free to list</span>
               <span>•</span>
@@ -271,6 +286,64 @@ const SellPage = () => {
     );
   }
   
+  if (showPricing) {
+    return (
+      <div className="min-h-screen py-12 px-4">
+        <div className="max-w-7xl mx-auto">
+          <button
+            onClick={() => setShowPricing(false)}
+            className="text-gray-400 hover:text-white mb-8 flex items-center"
+          >
+            ← Back to listing types
+          </button>
+          
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold text-white mb-4">B2B Seller Plans</h2>
+            <p className="text-gray-400">Scale your business with advanced tools and reach.</p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8 mb-20">
+            {b2bPlans.map((plan) => (
+              <div key={plan.name} className={`glass-effect p-8 rounded-3xl border ${plan.recommended ? 'border-blue-500/50 ring-2 ring-blue-500/20' : 'border-white/10'} relative overflow-hidden group`}>
+                {plan.recommended && (
+                  <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-black px-4 py-1 rounded-bl-xl uppercase tracking-widest">
+                    Recommended
+                  </div>
+                )}
+                <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
+                <div className="flex items-baseline mb-6">
+                  <span className="text-4xl font-black text-white">{plan.price}</span>
+                  <span className="text-gray-500 ml-1">/mo</span>
+                </div>
+                <ul className="space-y-4 mb-8">
+                  {plan.features.map(f => (
+                    <li key={f} className="flex items-center text-gray-400 text-sm">
+                      <CheckCircle className="w-4 h-4 text-blue-400 mr-2" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <button className={`w-full py-3 rounded-xl font-bold transition-all ${plan.recommended ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30' : 'bg-white/5 hover:bg-white/10 text-white border border-white/10'}`}>
+                  Choose {plan.name}
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Payment Providers */}
+          <div className="text-center">
+            <p className="text-sm text-gray-500 mb-6 uppercase tracking-widest font-bold">Securely Processed By</p>
+            <div className="flex justify-center items-center space-x-12 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
+              <img src="https://upload.wikimedia.org/wikipedia/commons/b/ba/Stripe_Logo%2C_revised_2016.svg" alt="Stripe" className="h-8" />
+              <img src="https://upload.wikimedia.org/wikipedia/commons/8/89/Razorpay_logo.svg" alt="Razorpay" className="h-8" />
+              <img src="https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg" alt="PayPal" className="h-8" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Form View
   const selectedTypeData = listingTypes.find(t => t.id === selectedType);
   const Icon = selectedTypeData.icon;

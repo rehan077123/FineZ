@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { ArrowLeft, Star, Share2, ExternalLink, ShoppingCart } from 'lucide-react';
+import { ArrowLeft, Star, Share2, ExternalLink, ShoppingCart, ShieldCheck, Zap, Truck } from 'lucide-react';
 import SocialShare from '../components/SocialShare';
 import PurchaseModal from '../components/PurchaseModal';
+import ComparisonTable from '../components/ComparisonTable';
+import ReviewSection from '../components/ReviewSection';
 import { api } from '../utils/api';
 
 const DEFAULT_IMAGES = {
@@ -248,6 +250,36 @@ export default function ProductDetailPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Trust & Conversion Section */}
+      <div className="max-w-6xl mx-auto px-4 pb-20">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+          <div className="flex flex-col items-center text-center p-6 bg-slate-800/30 rounded-xl border border-slate-700">
+            <div className="mb-4 p-3 bg-green-500/10 rounded-full">
+              <ShieldCheck className="w-8 h-8 text-green-400" />
+            </div>
+            <h4 className="text-white font-bold mb-2">Secure Payments</h4>
+            <p className="text-gray-400 text-sm">Every transaction is encrypted and secured by industry standards.</p>
+          </div>
+          <div className="flex flex-col items-center text-center p-6 bg-slate-800/30 rounded-xl border border-slate-700">
+            <div className="mb-4 p-3 bg-blue-500/10 rounded-full">
+              <Zap className="w-8 h-8 text-blue-400" />
+            </div>
+            <h4 className="text-white font-bold mb-2">Instant Access</h4>
+            <p className="text-gray-400 text-sm">Get immediate access to digital products or tracking for physical items.</p>
+          </div>
+          <div className="flex flex-col items-center text-center p-6 bg-slate-800/30 rounded-xl border border-slate-700">
+            <div className="mb-4 p-3 bg-purple-500/10 rounded-full">
+              <Truck className="w-8 h-8 text-purple-400" />
+            </div>
+            <h4 className="text-white font-bold mb-2">Global Support</h4>
+            <p className="text-gray-400 text-sm">Our team is available 24/7 to help you with any issues.</p>
+          </div>
+        </div>
+
+        <ComparisonTable />
+        <ReviewSection />
       </div>
 
       {/* Purchase Modal */}

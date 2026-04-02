@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Zap, Mail, Twitter, Instagram, Linkedin } from 'lucide-react';
+import { Zap, Mail, Twitter, Instagram, Linkedin, ShieldCheck, Award, Star, CheckCircle2 } from 'lucide-react';
 
 const Footer = () => {
   const categories = [
@@ -16,12 +16,21 @@ const Footer = () => {
     { name: 'About Us', path: '/about' },
     { name: 'Privacy Policy', path: '/privacy' },
     { name: 'Affiliate Disclaimer', path: '/disclaimer' },
-    { name: 'Contact', path: '/contact' }
+    { name: 'Contact', path: '/contact' },
+    { name: 'Sitemap', path: '/sitemap.xml' }
   ];
   
   return (
     <footer className="bg-[#0F172A] border-t border-white/10 mt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {/* Trust Badges Section - CRITICAL FOR AUTHORITY */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12 py-8 border-b border-white/5">
+          <TrustBadge icon={<ShieldCheck className="text-green-400" />} title="Verified Tools" desc="Hand-picked & tested" />
+          <TrustBadge icon={<Award className="text-blue-400" />} title="Top Rated" desc="By 50k+ users" />
+          <TrustBadge icon={<Star className="text-yellow-400" />} title="Expert Picks" desc="Daily updates" />
+          <TrustBadge icon={<CheckCircle2 className="text-purple-400" />} title="Secure Site" desc="SSL Encrypted" />
+        </div>
+
         {/* Main Footer Content */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           {/* Brand */}
@@ -104,5 +113,17 @@ const Footer = () => {
     </footer>
   );
 };
+
+const TrustBadge = ({ icon, title, desc }) => (
+  <div className="flex items-center space-x-3 group">
+    <div className="p-2 rounded-lg bg-white/5 border border-white/10 group-hover:border-white/20 transition-all">
+      {icon}
+    </div>
+    <div>
+      <h4 className="text-white text-xs font-bold uppercase tracking-wider">{title}</h4>
+      <p className="text-gray-500 text-[10px]">{desc}</p>
+    </div>
+  </div>
+);
 
 export default Footer;

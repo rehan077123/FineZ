@@ -66,6 +66,45 @@ export const api = {
   getAnalytics: async () => {
     const response = await axios.get(`${API}/analytics/stats`);
     return response.data;
+  },
+
+  // Blogs
+  getBlogs: async (category) => {
+    const response = await axios.get(`${API}/blogs`, { params: { category } });
+    return response.data;
+  },
+
+  getBlogBySlug: async (slug) => {
+    const response = await axios.get(`${API}/blogs/${slug}`);
+    return response.data;
+  },
+
+  // Reviews
+  getProductReviews: async (productId) => {
+    const response = await axios.get(`${API}/products/${productId}/reviews`);
+    return response.data;
+  },
+
+  createProductReview: async (productId, rating, comment, token) => {
+    const response = await axios.post(`${API}/products/${productId}/reviews`, { rating, comment }, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  },
+
+  // Dashboards
+  getSellerDashboard: async (token) => {
+    const response = await axios.get(`${API}/seller/dashboard`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  },
+
+  getAffiliateDashboard: async (token) => {
+    const response = await axios.get(`${API}/affiliate/dashboard`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
   }
 };
 

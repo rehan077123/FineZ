@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search, Link as LinkIcon } from 'lucide-react';
+import { Search, Link as LinkIcon, DollarSign, Globe, ShieldCheck, TrendingUp } from 'lucide-react';
 import ProductCard from '@/components/ProductCard';
 import { api } from '@/utils/api';
 
@@ -46,6 +46,30 @@ useEffect(() => {
           <p className="text-sm text-amber-300 mt-2">
             This page contains affiliate links. <a href="/disclaimer" className="underline">Learn more</a>
           </p>
+        </div>
+
+        {/* Affiliate Networks Support */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
+          <div className="glass-effect p-4 rounded-xl border border-white/5 text-center">
+            <DollarSign className="w-6 h-6 text-green-400 mx-auto mb-2" />
+            <span className="text-xs text-gray-400 block uppercase tracking-wider">High Commission</span>
+            <span className="text-white font-bold">Amazon & Shopify</span>
+          </div>
+          <div className="glass-effect p-4 rounded-xl border border-white/5 text-center">
+            <Globe className="w-6 h-6 text-blue-400 mx-auto mb-2" />
+            <span className="text-xs text-gray-400 block uppercase tracking-wider">Global Reach</span>
+            <span className="text-white font-bold">CJ & Impact</span>
+          </div>
+          <div className="glass-effect p-4 rounded-xl border border-white/5 text-center">
+            <ShieldCheck className="w-6 h-6 text-amber-400 mx-auto mb-2" />
+            <span className="text-xs text-gray-400 block uppercase tracking-wider">Verified</span>
+            <span className="text-white font-bold">ShareASale</span>
+          </div>
+          <div className="glass-effect p-4 rounded-xl border border-white/5 text-center">
+            <TrendingUp className="w-6 h-6 text-purple-400 mx-auto mb-2" />
+            <span className="text-xs text-gray-400 block uppercase tracking-wider">Top Tiers</span>
+            <span className="text-white font-bold">ClickBank</span>
+          </div>
         </div>
         
         <div className="max-w-2xl mx-auto mb-8">

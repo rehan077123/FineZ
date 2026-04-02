@@ -17,9 +17,17 @@ ROOT_DIR = Path(__file__).resolve().parent
 load_dotenv(ROOT_DIR / ".env", override=True)
 
 # MongoDB connection
-mongo_url = os.environ["MONGO_URL"]
+mongo_url = os.environ["MONGO_URI"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
+
+AFFILIATE_TAG = "finezofficial-21"
+
+def apply_amazon_tag(link: str) -> str:
+    if "amazon" in link.lower() and "tag=" not in link:
+        sep = "&" if "?" in link else "?"
+        return f"{link}{sep}tag={AFFILIATE_TAG}"
+    return link
 
 
 # 50+ Curated Products with Real Affiliate Potential
@@ -27,16 +35,16 @@ SEED_PRODUCTS = [
     # ========== AI TOOLS (Featured) ==========
     {
         "title": "ChatGPT Plus",
-        "description": "Advanced AI assistant powered by GPT-5.2. Get instant "
+        "description": "Advanced AI assistant powered by GPT-4o. Get instant "
                        "answers, write content, code, and more with the most powerful AI.",
         "why_this_product": "⚡ 10x your productivity with AI that actually "
         "understands context",
         "price": 20.0,
         "category": "AI Tools",
         "type": "affiliate",
-        "affiliate_link": "https://openai.com/chatgpt?ref=yourid",
-        "affiliate_network": "OpenAI Partners",
-        "image_url": "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=500&h=300&fit=crop",
+        "affiliate_link": "https://openai.com/chatgpt",
+        "affiliate_network": "OpenAI",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/0/04/ChatGPT_logo.svg",
         "featured": True,
         "premium": True,
     },
@@ -48,9 +56,9 @@ SEED_PRODUCTS = [
         "price": 49.0,
         "category": "AI Tools",
         "type": "affiliate",
-        "affiliate_link": "https://jasper.ai?ref=yourid",
+        "affiliate_link": "https://www.jasper.ai",
         "affiliate_network": "Impact",
-        "image_url": "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=500&h=300&fit=crop",
+        "image_url": "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800",
         "featured": True,
     },
     {
@@ -61,9 +69,9 @@ SEED_PRODUCTS = [
         "price": 30.0,
         "category": "AI Tools",
         "type": "affiliate",
-        "affiliate_link": "https://midjourney.com?ref=yourid",
+        "affiliate_link": "https://www.midjourney.com",
         "affiliate_network": "Direct",
-        "image_url": "https://images.unsplash.com/photo-1686191128892-3b4673725b27?w=500&h=300&fit=crop",
+        "image_url": "https://midjourney.com/favicon.ico",
         "featured": True,
     },
     {
@@ -74,9 +82,9 @@ SEED_PRODUCTS = [
         "price": 10.0,
         "category": "AI Tools",
         "type": "affiliate",
-        "affiliate_link": "https://notion.so?ref=yourid",
+        "affiliate_link": "https://www.notion.so",
         "affiliate_network": "Notion Partners",
-        "image_url": "https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/4/45/Notion_app_logo.png",
         "featured": False,
     },
     {
@@ -87,9 +95,9 @@ SEED_PRODUCTS = [
         "price": 49.0,
         "category": "AI Tools",
         "type": "affiliate",
-        "affiliate_link": "https://copy.ai?ref=yourid",
+        "affiliate_link": "https://www.copy.ai",
         "affiliate_network": "PartnerStack",
-        "image_url": "https://images.unsplash.com/photo-1552664730-d307ca884978?w=500&h=300&fit=crop",
+        "image_url": "https://copy.ai/favicon.ico",
         "featured": False,
     },
     # ========== TECH & SOFTWARE ==========
@@ -101,9 +109,9 @@ SEED_PRODUCTS = [
         "price": 29.0,
         "category": "Tech",
         "type": "affiliate",
-        "affiliate_link": "https://shopify.com?ref=yourid",
+        "affiliate_link": "https://www.shopify.com",
         "affiliate_network": "Shopify Partners",
-        "image_url": "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/0/0e/Shopify_logo_2018.svg",
         "featured": True,
         "premium": True,
     },
@@ -115,9 +123,9 @@ SEED_PRODUCTS = [
         "price": 2.99,
         "category": "Tech",
         "type": "affiliate",
-        "affiliate_link": "https://hostinger.com?ref=yourid",
+        "affiliate_link": "https://www.hostinger.com",
         "affiliate_network": "Hostinger Partners",
-        "image_url": "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=500&h=300&fit=crop",
+        "image_url": "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800",
         "featured": True,
     },
     {
@@ -128,9 +136,9 @@ SEED_PRODUCTS = [
         "price": 12.99,
         "category": "Tech",
         "type": "affiliate",
-        "affiliate_link": "https://canva.com/pro?ref=yourid",
+        "affiliate_link": "https://www.canva.com",
         "affiliate_network": "Canva Partners",
-        "image_url": "https://images.unsplash.com/photo-1626785774573-4b799315345d?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/0/08/Canva_icon_2021.svg",
         "featured": False,
     },
     {
@@ -141,9 +149,9 @@ SEED_PRODUCTS = [
         "price": 12.0,
         "category": "Tech",
         "type": "affiliate",
-        "affiliate_link": "https://grammarly.com?ref=yourid",
+        "affiliate_link": "https://www.grammarly.com",
         "affiliate_network": "Impact",
-        "image_url": "https://images.unsplash.com/photo-1455390582262-044cdead277a?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/0/03/Grammarly_logo.svg",
         "featured": False,
     },
     {
@@ -154,9 +162,9 @@ SEED_PRODUCTS = [
         "price": 3.49,
         "category": "Tech",
         "type": "affiliate",
-        "affiliate_link": "https://nordvpn.com?ref=yourid",
+        "affiliate_link": "https://nordvpn.com",
         "affiliate_network": "CJ Affiliate",
-        "image_url": "https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/e/ed/NordVPN_Logo.svg",
         "featured": False,
     },
     # ========== SIDE HUSTLES & EARNING ==========
@@ -168,9 +176,9 @@ SEED_PRODUCTS = [
         "price": 0.0,
         "category": "Side Hustles",
         "type": "idea",
-        "affiliate_link": "https://fiverr.com?ref=yourid",
+        "affiliate_link": "https://www.fiverr.com",
         "affiliate_network": "CJ Affiliate",
-        "image_url": "https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/1/18/Fiverr_Logo_09.2020.svg",
         "featured": True,
     },
     {
@@ -181,9 +189,9 @@ SEED_PRODUCTS = [
         "price": 0.0,
         "category": "Side Hustles",
         "type": "idea",
-        "affiliate_link": "https://upwork.com?ref=yourid",
+        "affiliate_link": "https://www.upwork.com",
         "affiliate_network": "Direct",
-        "image_url": "https://images.unsplash.com/photo-1552664730-d307ca884978?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/a/ab/Upwork-logo.svg",
         "featured": False,
     },
     {
@@ -194,9 +202,9 @@ SEED_PRODUCTS = [
         "price": 0.0,
         "category": "Side Hustles",
         "type": "idea",
-        "affiliate_link": "https://affiliate-program.amazon.in?ref=yourid",
+        "affiliate_link": "https://affiliate-program.amazon.in",
         "affiliate_network": "Amazon",
-        "image_url": "https://images.unsplash.com/photo-1523474253046-8cd2748b5fd2?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg",
         "featured": True,
     },
     {
@@ -207,9 +215,9 @@ SEED_PRODUCTS = [
         "price": 0.0,
         "category": "Side Hustles",
         "type": "dropshipping",
-        "affiliate_link": "https://printful.com?ref=yourid",
+        "affiliate_link": "https://www.printful.com",
         "affiliate_network": "Printful Partners",
-        "image_url": "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/e/ee/Printful_logo.svg",
         "featured": False,
     },
     {
@@ -220,9 +228,9 @@ SEED_PRODUCTS = [
         "price": 39.0,
         "category": "Side Hustles",
         "type": "affiliate",
-        "affiliate_link": "https://teachable.com?ref=yourid",
+        "affiliate_link": "https://teachable.com",
         "affiliate_network": "Impact",
-        "image_url": "https://images.unsplash.com/photo-1501504905252-473c47e087f8?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/e/e3/Teachable_logo.png",
         "featured": False,
     },
     # ========== LEARNING & COURSES ==========
@@ -234,9 +242,9 @@ SEED_PRODUCTS = [
         "price": 59.0,
         "category": "Learn",
         "type": "affiliate",
-        "affiliate_link": "https://coursera.org/courseraplus?ref=yourid",
+        "affiliate_link": "https://www.coursera.org",
         "affiliate_network": "Coursera Partners",
-        "image_url": "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/9/97/Coursera-Logo_600x600.svg",
         "featured": True,
     },
     {
@@ -247,9 +255,9 @@ SEED_PRODUCTS = [
         "price": 13.99,
         "category": "Learn",
         "type": "affiliate",
-        "affiliate_link": "https://udemy.com?ref=yourid",
+        "affiliate_link": "https://www.udemy.com",
         "affiliate_network": "CJ Affiliate",
-        "image_url": "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/e/e3/Udemy_logo.svg",
         "featured": False,
     },
     {
@@ -260,9 +268,9 @@ SEED_PRODUCTS = [
         "price": 8.25,
         "category": "Learn",
         "type": "affiliate",
-        "affiliate_link": "https://skillshare.com?ref=yourid",
+        "affiliate_link": "https://www.skillshare.com",
         "affiliate_network": "Impact",
-        "image_url": "https://images.unsplash.com/photo-1513258496099-48168024aec0?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/8/82/Skillshare_logo_2020.svg",
         "featured": False,
     },
     {
@@ -273,9 +281,9 @@ SEED_PRODUCTS = [
         "price": 29.99,
         "category": "Learn",
         "type": "affiliate",
-        "affiliate_link": "https://linkedin.com/learning?ref=yourid",
+        "affiliate_link": "https://www.linkedin.com/learning",
         "affiliate_network": "LinkedIn",
-        "image_url": "https://images.unsplash.com/photo-1553877522-43269d4ea984?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/0/01/LinkedIn_Logo.svg",
         "featured": False,
     },
     {
@@ -286,25 +294,12 @@ SEED_PRODUCTS = [
         "price": 180.0,
         "category": "Learn",
         "type": "affiliate",
-        "affiliate_link": "https://masterclass.com?ref=yourid",
+        "affiliate_link": "https://www.masterclass.com",
         "affiliate_network": "CJ Affiliate",
-        "image_url": "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/0/07/MasterClass_logo.svg",
         "featured": False,
     },
     # ========== FITNESS ==========
-    {
-        "title": "MyFitnessPal Premium",
-        "description": "Track calories, macros, and exercise. Get personalized meal plans "
-                       "and achieve your fitness goals.",
-        "why_this_product": "💪 Lose weight and get fit - 200M+ users can't be wrong",
-        "price": 9.99,
-        "category": "Fitness",
-        "type": "affiliate",
-        "affiliate_link": "https://myfitnesspal.com?ref=yourid",
-        "affiliate_network": "Direct",
-        "image_url": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=500&h=300&fit=crop",
-        "featured": False,
-    },
     {
         "title": "Headspace Meditation App",
         "description": "Guided meditation and mindfulness app. Reduce stress, sleep better, "
@@ -313,9 +308,9 @@ SEED_PRODUCTS = [
         "price": 12.99,
         "category": "Fitness",
         "type": "affiliate",
-        "affiliate_link": "https://headspace.com?ref=yourid",
+        "affiliate_link": "https://www.headspace.com",
         "affiliate_network": "CJ Affiliate",
-        "image_url": "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/2/23/Headspace_Logo.svg",
         "featured": False,
     },
     {
@@ -326,9 +321,9 @@ SEED_PRODUCTS = [
         "price": 9.99,
         "category": "Fitness",
         "type": "affiliate",
-        "affiliate_link": "https://fitbit.com?ref=yourid",
+        "affiliate_link": "https://www.fitbit.com",
         "affiliate_network": "CJ Affiliate",
-        "image_url": "https://images.unsplash.com/photo-1576243345690-4e4b79b63288?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/3/30/Fitbit_logo.svg",
         "featured": False,
     },
     # ========== FASHION & STYLE ==========
@@ -339,9 +334,22 @@ SEED_PRODUCTS = [
         "price": 0.0,
         "category": "Fashion",
         "type": "affiliate",
-        "affiliate_link": "https://asos.com?ref=yourid",
+        "affiliate_link": "https://www.asos.com",
         "affiliate_network": "AWIN",
-        "image_url": "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/4/4b/Asos_Logo.svg",
+        "featured": False,
+    },
+    {
+        "title": "Nike Air Zoom Pegasus",
+        "description": "Premium running shoes with responsive cushioning. "
+                       "Perfect for marathons and daily training.",
+        "why_this_product": "🏃 100M+ runners trust Pegasus for ultimate comfort",
+        "price": 120.0,
+        "category": "Fitness",
+        "type": "affiliate",
+        "affiliate_link": "https://www.nike.com",
+        "affiliate_network": "Nike Partners",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/a/a6/Logo_NIKE.svg",
         "featured": False,
     },
     {
@@ -352,9 +360,9 @@ SEED_PRODUCTS = [
         "price": 0.0,
         "category": "Fashion",
         "type": "affiliate",
-        "affiliate_link": "https://zalando.com?ref=yourid",
+        "affiliate_link": "https://www.zalando.com",
         "affiliate_network": "AWIN",
-        "image_url": "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/d/df/Zalando_logo.svg",
         "featured": False,
     },
     # ========== HOME & LIFESTYLE ==========
@@ -366,9 +374,9 @@ SEED_PRODUCTS = [
         "price": 0.0,
         "category": "Home",
         "type": "affiliate",
-        "affiliate_link": "https://ikea.com?ref=yourid",
+        "affiliate_link": "https://www.ikea.com",
         "affiliate_network": "AWIN",
-        "image_url": "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/c/c5/Ikea_logo.svg",
         "featured": False,
     },
     {
@@ -378,10 +386,10 @@ SEED_PRODUCTS = [
         "why_this_product": "🛋️ Up to 70% OFF home furniture - free shipping over $35",
         "price": 0.0,
         "category": "Home",
-        "type": "marketplace",
-        "affiliate_link": "https://wayfair.com?ref=yourid",
+        "type": "affiliate",
+        "affiliate_link": "https://www.wayfair.com",
         "affiliate_network": "CJ Affiliate",
-        "image_url": "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/d/de/Wayfair_logo.svg",
         "featured": False,
     },
     # ========== ADDITIONAL HIGH-VALUE PRODUCTS ==========
@@ -406,9 +414,9 @@ SEED_PRODUCTS = [
         "price": 119.95,
         "category": "Tech",
         "type": "affiliate",
-        "affiliate_link": "https://semrush.com?ref=yourid",
+        "affiliate_link": "https://www.semrush.com",
         "affiliate_network": "Impact",
-        "image_url": "https://images.unsplash.com/photo-1432888498266-38ffec3eaf0a?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/e/ee/Semrush_logo.svg",
         "featured": False,
     },
     {
@@ -418,9 +426,9 @@ SEED_PRODUCTS = [
         "price": 29.0,
         "category": "Tech",
         "type": "affiliate",
-        "affiliate_link": "https://convertkit.com?ref=yourid",
+        "affiliate_link": "https://convertkit.com",
         "affiliate_network": "ConvertKit Partners",
-        "image_url": "https://images.unsplash.com/photo-1563986768609-322da13575f3?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/e/e3/ConvertKit_logo.png",
         "featured": False,
     },
     {
@@ -431,9 +439,9 @@ SEED_PRODUCTS = [
         "price": 12.0,
         "category": "Tech",
         "type": "affiliate",
-        "affiliate_link": "https://dropbox.com/business?ref=yourid",
+        "affiliate_link": "https://www.dropbox.com",
         "affiliate_network": "CJ Affiliate",
-        "image_url": "https://images.unsplash.com/photo-1544383835-bda2bc66a55d?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/7/78/Dropbox_Icon.svg",
         "featured": False,
     },
     {
@@ -443,9 +451,9 @@ SEED_PRODUCTS = [
         "price": 0.0,
         "category": "Tech",
         "type": "affiliate",
-        "affiliate_link": "https://mailchimp.com?ref=yourid",
+        "affiliate_link": "https://mailchimp.com",
         "affiliate_network": "Impact",
-        "image_url": "https://images.unsplash.com/photo-1563986768494-4dee2763ff3f?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/e/e3/Mailchimp_logo.svg",
         "featured": False,
     },
     {
@@ -456,9 +464,9 @@ SEED_PRODUCTS = [
         "price": 49.0,
         "category": "Tech",
         "type": "affiliate",
-        "affiliate_link": "https://elementor.com?ref=yourid",
+        "affiliate_link": "https://elementor.com",
         "affiliate_network": "Elementor Partners",
-        "image_url": "https://images.unsplash.com/photo-1547658719-da2b51169166?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/e/e3/Elementor_logo.svg",
         "featured": False,
     },
     {
@@ -468,9 +476,9 @@ SEED_PRODUCTS = [
         "price": 14.95,
         "category": "Learn",
         "type": "affiliate",
-        "affiliate_link": "https://audible.com?ref=yourid",
+        "affiliate_link": "https://www.audible.com",
         "affiliate_network": "Amazon",
-        "image_url": "https://images.unsplash.com/photo-1589998059171-988d887df646?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/d/df/Audible_logo.svg",
         "featured": False,
     },
     {
@@ -480,9 +488,9 @@ SEED_PRODUCTS = [
         "price": 9.99,
         "category": "Learn",
         "type": "affiliate",
-        "affiliate_link": "https://amazon.com/kindle-unlimited?ref=yourid",
+        "affiliate_link": "https://www.amazon.com/kindle-unlimited",
         "affiliate_network": "Amazon",
-        "image_url": "https://images.unsplash.com/photo-1512820790803-83ca734da794?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/e/e3/Kindle_logo.svg",
         "featured": False,
     },
     {
@@ -492,9 +500,9 @@ SEED_PRODUCTS = [
         "price": 14.99,
         "category": "Tech",
         "type": "affiliate",
-        "affiliate_link": "https://zoom.us?ref=yourid",
+        "affiliate_link": "https://zoom.us",
         "affiliate_network": "Impact",
-        "image_url": "https://images.unsplash.com/photo-1588196749597-9ff075ee6b5b?w=500&h=300&fit=crop",
+        "image_url": "https://upload.wikimedia.org/wikipedia/commons/e/e3/Zoom_logo.svg",
         "featured": False,
     },
     {
@@ -675,25 +683,62 @@ SEED_PRODUCTS = [
     },
 ]
 
+# ========== BLOG POSTS (SEO Engine) ==========
+SEED_BLOGS = [
+    {
+        "title": "Top 10 AI Tools to Make $5000/Month in 2026",
+        "content": "Full guide on using ChatGPT, Jasper, and Midjourney to build a high-income business...",
+        "excerpt": "Discover the most powerful AI tools that can automate your work and generate serious income.",
+        "author": "FineZ Team",
+        "category": "AI Tools",
+        "image": "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800",
+        "slug": "top-10-ai-tools-make-money-2026"
+    },
+    {
+        "title": "How to Start Affiliate Marketing with Zero Investment",
+        "content": "The step-by-step roadmap to earning your first $1000 without spending a rupee...",
+        "excerpt": "Complete beginner's guide to affiliate marketing. Learn how to choose products and build an audience.",
+        "author": "FineZ Team",
+        "category": "Side Hustles",
+        "image": "https://images.unsplash.com/photo-1556740758-90de374c12ad?w=800",
+        "slug": "start-affiliate-marketing-zero-investment"
+    },
+    {
+        "title": "Dropshipping in India: Complete Guide for 2026",
+        "content": "Everything you need to know about the Indian e-commerce landscape and high-margin products...",
+        "excerpt": "Everything you need to know about starting a dropshipping business in India. Products, suppliers, and marketing.",
+        "author": "FineZ Team",
+        "category": "Dropshipping",
+        "image": "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800",
+        "slug": "dropshipping-india-guide-2026"
+    },
+    {
+        "title": "7 Passive Income Ideas for Students in 2026",
+        "content": "From selling digital notes to micro-SaaS, here's how to earn while you study...",
+        "excerpt": "Best side hustles for students that require zero upfront cost and minimal time commitment.",
+        "author": "FineZ Team",
+        "category": "Side Hustles",
+        "image": "https://images.unsplash.com/photo-1523240715630-9415511e834b?w=800",
+        "slug": "passive-income-ideas-students-2026"
+    },
+    {
+        "title": "Mastering SEO for Affiliate Sites: The 2026 Checklist",
+        "content": "How to rank on Google's first page using the latest AI-driven SEO strategies...",
+        "excerpt": "Learn the technical and content SEO strategies that high-authority affiliate sites use to dominate search.",
+        "author": "FineZ Team",
+        "category": "Learn",
+        "image": "https://images.unsplash.com/photo-1432888622747-4eb9a8f2c1d9?w=800",
+        "slug": "mastering-seo-affiliate-sites-2026"
+    }
+]
+
 
 async def seed_database():
-    """Seed the database with products"""
+    """Seed the database with products and blogs"""
     try:
-        # Check if products already exist
-        # existing_count = await db.products.count_documents({})
-
-        # if existing_count > 0:
-        #     print(f"⚠️ Database already has {existing_count} products.")
-        #     response = input("Do you want to clear and reseed? (yes/no): ")
-        #     if response.lower() != 'yes':
-        #         print("❌ Seeding cancelled.")
-        #         return
-
-        # Clear existing products
-        await db.products.delete_many({})
-        print("✅ Cleared existing products")
-
-        # Insert seed products
+        # Seed Products
+        print(f"Seeding {len(SEED_PRODUCTS)} products...")
+        await db.products.delete_many({})  # Clear existing
         products_to_insert = []
         for product_data in SEED_PRODUCTS:
             product_data["id"] = str(uuid.uuid4())
@@ -703,84 +748,34 @@ async def seed_database():
             )
             product_data["review_count"] = (
                 hash(product_data["title"]) % 500
-            ) + 50  # Random reviews 50-550
+            ) + 50
+            product_data["affiliate_link"] = apply_amazon_tag(product_data.get("affiliate_link", ""))
+            product_data["verified"] = True  # Seeded products are auto-verified
             product_data["created_at"] = datetime.now(timezone.utc).isoformat()
             product_data["updated_at"] = datetime.now(timezone.utc).isoformat()
             products_to_insert.append(product_data)
+        await db.products.insert_many(products_to_insert)
 
-        result = await db.products.insert_many(products_to_insert)
+        # Seed Blogs
+        print(f"Seeding {len(SEED_BLOGS)} blog posts...")
+        await db.blogs.delete_many({})  # Clear existing
+        blogs_to_insert = []
+        for b in SEED_BLOGS:
+            b["id"] = str(uuid.uuid4())
+            b["date"] = datetime.now(timezone.utc).isoformat()
+            b["updated_at"] = datetime.now(timezone.utc).isoformat()
+            blogs_to_insert.append(b)
+        await db.blogs.insert_many(blogs_to_insert)
 
-        print(f"\n🚀 SUCCESS! Seeded {len(result.inserted_ids)} products")
-        print(
-            f"📊 Featured products: {sum(1 for p in SEED_PRODUCTS if p.get('featured'))}"
-        )
-        print(
-            f"⭐ Premium products: {sum(1 for p in SEED_PRODUCTS if p.get('premium'))}"
-        )
-        print("\n✅ Your FineZ platform is ready to make money!")
+        print("Seeding complete!")
 
     except Exception as e:
-        print(f"❌ Error seeding database: {e}")
+        print(f"Error seeding database: {e}")
     finally:
         client.close()
 
 
 if __name__ == "__main__":
-    print("🌱 FineZ Database Seeder")
-    print("=" * 50)
-    asyncio.run(seed_database())
-
-
-async def seed_database():
-    """Seed the database with products"""
-    try:
-        # Check if products already exist
-        # existing_count = await db.products.count_documents({})
-
-        # if existing_count > 0:
-        #     print(f"⚠️ Database already has {existing_count} products.")
-        #     response = input("Do you want to clear and reseed? (yes/no): ")
-        #     if response.lower() != 'yes':
-        #         print("❌ Seeding cancelled.")
-        #         return
-
-        # Clear existing products
-        await db.products.delete_many({})
-        print("✅ Cleared existing products")
-
-        # Insert seed products
-        products_to_insert = []
-        for product_data in SEED_PRODUCTS:
-            product_data["id"] = str(uuid.uuid4())
-            product_data["clicks"] = 0
-            product_data["rating"] = round(
-                4.0 + (hash(product_data["title"]) % 10) / 10, 2
-            )
-            product_data["review_count"] = (
-                hash(product_data["title"]) % 500
-            ) + 50  # Random reviews 50-550
-            product_data["created_at"] = datetime.now(timezone.utc).isoformat()
-            product_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-            products_to_insert.append(product_data)
-
-        result = await db.products.insert_many(products_to_insert)
-
-        print(f"\n🚀 SUCCESS! Seeded {len(result.inserted_ids)} products")
-        print(
-            f"📊 Featured products: {sum(1 for p in SEED_PRODUCTS if p.get('featured'))}"
-        )
-        print(
-            f"⭐ Premium products: {sum(1 for p in SEED_PRODUCTS if p.get('premium'))}"
-        )
-        print("\n✅ Your FineZ platform is ready to make money!")
-
-    except Exception as e:
-        print(f"❌ Error seeding database: {e}")
-    finally:
-        client.close()
-
-
-if __name__ == "__main__":
-    print("🌱 FineZ Database Seeder")
+    print("FineZ Database Seeder")
     print("=" * 50)
     asyncio.run(seed_database())

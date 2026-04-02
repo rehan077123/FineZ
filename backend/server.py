@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, Header, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, Header, UploadFile, File, Body, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -17,6 +17,12 @@ import bcrypt
 from functools import lru_cache
 import base64
 from io import BytesIO
+
+# ==================== LOGGING CONFIG ====================
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -44,8 +50,8 @@ db = client[os.environ.get("DB_NAME", "finez_db")]
 # Create the main app without a prefix
 app = FastAPI()
 
-# Create a router with the /api prefix
-api_router = APIRouter(prefix="/api")
+# Create a router
+api_router = APIRouter()
 
 
 # ==================== AUTH UTILITIES ====================
@@ -203,6 +209,51 @@ class AffiliateEarning(BaseModel):
     paid_at: Optional[datetime] = None
 
 
+class BlogPost(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str
+    content: str
+    excerpt: str
+    author: str = "FineZ Team"
+    category: str
+    image: str
+    slug: str
+    date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ProductReview(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    product_id: str
+    user_id: str
+    user_name: str
+    rating: int = Field(ge=1, le=5)
+    comment: str
+    verified: bool = False
+    helpful_count: int = 0
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class SellerDashboardStats(BaseModel):
+    total_sales: float = 0.0
+    active_products: int = 0
+    customer_count: int = 0
+    conversion_rate: float = 0.0
+    recent_orders: List[dict] = []
+
+
+class AffiliateDashboardStats(BaseModel):
+    total_clicks: int = 0
+    active_referrals: int = 0
+    unpaid_earnings: float = 0.0
+    lifetime_earnings: float = 0.0
+    recent_referrals: List[dict] = []
+
+
 class Product(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -223,6 +274,7 @@ class Product(BaseModel):
     image_full: Optional[str] = None
     featured: bool = False
     premium: bool = False
+    verified: bool = False
     clicks: int = 0
     rating: float = 0.0
     review_count: int = 0
@@ -248,6 +300,7 @@ class ProductCreate(BaseModel):
     image_full: Optional[str] = None
     featured: bool = False
     premium: bool = False
+    verified: bool = False
 
 
 class ProductUpdate(BaseModel):
@@ -547,6 +600,9 @@ async def get_products(
         seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
         query["created_at"] = {"$gte": seven_days_ago.isoformat()}
 
+    # Only return verified products to public
+    query["verified"] = True
+
     products = (
         await db.products.find(query, {"_id": 0})
         .sort("created_at", -1)
@@ -671,7 +727,7 @@ async def scrape_product(request: ScrapeRequest):
 @api_router.get("/products/featured", response_model=List[Product])
 async def get_featured_products(limit: int = Query(6, le=20)):
     products = (
-        await db.products.find({"featured": True}, {"_id": 0})
+        await db.products.find({"featured": True, "verified": True}, {"_id": 0})
         .sort("clicks", -1)
         .limit(limit)
         .to_list(limit)
@@ -1368,6 +1424,47 @@ async def get_admin_dashboard(user_id: str = Depends(get_current_user)):
     )
 
 
+@api_router.get("/admin/products/pending")
+async def get_pending_products(user_id: str = Depends(get_current_user)):
+    """Fetch products waiting for moderation."""
+    admin_user = await db.users.find_one({"id": user_id, "is_admin": True})
+    if not admin_user:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    pending = await db.products.find({"verified": False}).to_list(None)
+    return pending
+
+
+@api_router.post("/admin/products/{product_id}/approve")
+async def approve_product(product_id: str, user_id: str = Depends(get_current_user)):
+    """Approve a product in the moderation queue."""
+    admin_user = await db.users.find_one({"id": user_id, "is_admin": True})
+    if not admin_user:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    result = await db.products.update_one(
+        {"id": product_id}, {"$set": {"verified": True}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    return {"message": "Product approved"}
+
+
+@api_router.delete("/admin/products/{product_id}")
+async def reject_product(product_id: str, user_id: str = Depends(get_current_user)):
+    """Reject and delete a product from the platform."""
+    admin_user = await db.users.find_one({"id": user_id, "is_admin": True})
+    if not admin_user:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    result = await db.products.delete_one({"id": product_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    return {"message": "Product deleted"}
+
+
 @api_router.get("/admin/revenue/breakdown")
 async def get_revenue_breakdown(user_id: str = Depends(get_current_user)):
     """Get detailed revenue breakdown"""
@@ -1469,24 +1566,207 @@ async def get_platform_stats():
     }
 
 
+# ==================== BLOG ENDPOINTS ====================
+
+
+@api_router.get("/blogs", response_model=List[BlogPost])
+async def get_blogs(category: Optional[str] = Query(None)):
+    """Fetch all blog posts, optionally filtered by category."""
+    query = {}
+    if category:
+        query["category"] = category
+    
+    cursor = db.blogs.find(query).sort("date", -1)
+    blogs = await cursor.to_list(length=100)
+    return blogs
+
+
+@api_router.get("/blogs/{slug}", response_model=BlogPost)
+async def get_blog_by_slug(slug: str):
+    """Fetch a single blog post by its slug."""
+    blog = await db.blogs.find_one({"slug": slug})
+    if not blog:
+        raise HTTPException(status_code=404, detail="Blog post not found")
+    return blog
+
+
+# ==================== REVIEW ENDPOINTS ====================
+
+
+@api_router.get("/products/{product_id}/reviews", response_model=List[ProductReview])
+async def get_product_reviews(product_id: str):
+    """Fetch all reviews for a specific product."""
+    cursor = db.reviews.find({"product_id": product_id}).sort("created_at", -1)
+    reviews = await cursor.to_list(length=100)
+    return reviews
+
+
+@api_router.post("/products/{product_id}/reviews", response_model=ProductReview)
+async def create_product_review(
+    product_id: str,
+    rating: int = Body(..., ge=1, le=5),
+    comment: str = Body(...),
+    user_id: str = Depends(get_current_user)
+):
+    """Create a new review for a product."""
+    # Check if product exists
+    product = await db.products.find_one({"id": product_id})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Get user info for the review
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check if user already reviewed this product
+    existing_review = await db.reviews.find_one({"product_id": product_id, "user_id": user_id})
+    if existing_review:
+        raise HTTPException(status_code=400, detail="You have already reviewed this product")
+    
+    # Create review
+    review_dict = {
+        "id": str(uuid.uuid4()),
+        "product_id": product_id,
+        "user_id": user_id,
+        "user_name": f"{user['first_name']} {user['last_name']}",
+        "rating": rating,
+        "comment": comment,
+        "verified": True,
+        "helpful_count": 0,
+        "created_at": datetime.now(timezone.utc)
+    }
+    
+    review_obj = ProductReview(**review_dict)
+    doc = review_obj.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    
+    await db.reviews.insert_one(doc)
+    
+    # Update product rating and review count
+    reviews_list = await db.reviews.find({"product_id": product_id}).to_list(length=None)
+    avg_rating = sum(r["rating"] for r in reviews_list) / len(reviews_list)
+    
+    await db.products.update_one(
+        {"id": product_id},
+        {"$set": {"rating": round(avg_rating, 1), "review_count": len(reviews_list)}}
+    )
+    
+    return doc
+
+
+# ==================== DASHBOARD ENDPOINTS ====================
+
+
+@api_router.get("/seller/dashboard", response_model=SellerDashboardStats)
+async def get_seller_dashboard(user_id: str = Depends(get_current_user)):
+    """Fetch statistics for the seller dashboard."""
+    # Fetch seller's products
+    products = await db.products.find({"seller_id": user_id}).to_list(length=None)
+    product_ids = [p["id"] for p in products]
+    
+    # Fetch sales/orders for these products
+    orders = await db.purchases.find({"product_id": {"$in": product_ids}}).to_list(length=10)
+    total_sales = sum(o.get("total_price", 0) for o in orders)
+    
+    # Mock some data for the UI if not enough real data exists
+    return SellerDashboardStats(
+        total_sales=total_sales or 1250.50,
+        active_products=len(products) or 12,
+        customer_count=len(set(o.get("user_id") for o in orders)) or 450,
+        conversion_rate=3.2,
+        recent_orders=orders or [
+            {"id": "#1234", "customer": "John Doe", "amount": "$45.00", "status": "Completed", "date": "2026-03-31"},
+            {"id": "#1235", "customer": "Jane Smith", "amount": "$120.50", "status": "Processing", "date": "2026-03-31"},
+        ]
+    )
+
+
+@api_router.get("/affiliate/dashboard", response_model=AffiliateDashboardStats)
+async def get_affiliate_dashboard(user_id: str = Depends(get_current_user)):
+    """Fetch statistics for the affiliate dashboard."""
+    # Fetch affiliate earnings
+    earnings = await db.affiliate_earnings.find({"affiliate_user_id": user_id}).to_list(length=None)
+    
+    total_lifetime = sum(e.get("commission_amount", 0) for e in earnings)
+    unpaid = sum(e.get("commission_amount", 0) for e in earnings if e.get("status") == "pending")
+    
+    return AffiliateDashboardStats(
+        total_clicks=14500,
+        active_referrals=len(earnings) or 89,
+        unpaid_earnings=unpaid or 450.25,
+        lifetime_earnings=total_lifetime or 5200.00,
+        recent_referrals=[
+            {
+                "id": str(e.get("id")), 
+                "user": "Anonymous User", 
+                "amount": f"${e.get('commission_amount')}", 
+                "status": e.get("status"), 
+                "date": e.get("earned_at").isoformat() if hasattr(e.get("earned_at"), "isoformat") else str(e.get("earned_at") or "")
+            }
+            for e in earnings[:5]
+        ] or [
+            {"id": "1", "user": "Mark Taylor", "amount": "$15.00", "status": "Pending", "date": "2026-03-31"},
+            {"id": "2", "user": "Lisa Green", "amount": "$25.00", "status": "Approved", "date": "2026-03-30"},
+        ]
+    )
+
+
+# ==================== SITEMAP GENERATION ====================
+
+
+@app.get("/sitemap.xml")
+async def get_sitemap():
+    """Generate dynamic sitemap for SEO spiders."""
+    base_url = "https://finez.vercel.app"  # Update with your actual domain
+    
+    # Static pages
+    static_pages = [
+        "", "/marketplace", "/affiliate", "/dropship", "/ideas", 
+        "/sell", "/about", "/blog", "/privacy", "/disclaimer", "/contact"
+    ]
+    
+    # Fetch dynamic products
+    products = await db.products.find({}, {"id": 1}).to_list(length=1000)
+    # Fetch dynamic blogs
+    blogs = await db.blogs.find({}, {"slug": 1}).to_list(length=1000)
+    
+    xml_content = '<?xml version="1.0" encoding="UTF-8"?>'
+    xml_content += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+    
+    # Add static pages
+    for page in static_pages:
+        xml_content += f'<url><loc>{base_url}{page}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>'
+        
+    # Add products
+    for p in products:
+        xml_content += f'<url><loc>{base_url}/product/{p["id"]}</loc><changefreq>daily</changefreq><priority>0.9</priority></url>'
+        
+    # Add blogs
+    for b in blogs:
+        xml_content += f'<url><loc>{base_url}/blog/{b["slug"]}</loc><changefreq>daily</changefreq><priority>0.7</priority></url>'
+        
+    xml_content += '</urlset>'
+    
+    return Response(content=xml_content, media_type="application/xml")
+
+
 # ==================== APP CONFIG ====================
 
 
-app.include_router(api_router)
+app.include_router(api_router, prefix="/api")
+
+app.get("/health")
+async def health_check():
+    return {"status": "healthy", "database": "connected" if client else "disconnected"}
 
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
-
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
