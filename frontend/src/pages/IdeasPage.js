@@ -11,20 +11,17 @@ const IdeasPage = () => {
   
   const categories = ['All', 'AI Tools', 'Tech', 'Side Hustles', 'Learn'];
   
- // ✅ FIRST define function
-const loadProducts = useCallback(async () => {
-  try {
-    setLoading(true);
-
-    const data = await api.getProducts({ type: "affiliate" });
-
-    setProducts(Array.isArray(data) ? data : data.products || []);
-  } catch (error) {
-    console.error("Error loading affiliate products:", error);
-  } finally {
-    setLoading(false);
-  }
-}, []);
+  const loadProducts = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await api.getProducts({ type: "idea" });
+      setProducts(Array.isArray(data) ? data : data.products || []);
+    } catch (error) {
+      console.error("Error loading ideas:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
 
 // ✅ THEN useEffect

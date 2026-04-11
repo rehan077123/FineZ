@@ -12,6 +12,7 @@ const SellPage = () => {
     why_this_product: '',
     price: '',
     category: 'AI Tools',
+    section: 'Affiliate',
     affiliate_link: '',
     affiliate_network: '',
     image_url: '',
@@ -76,7 +77,8 @@ const SellPage = () => {
   // Only show blog option for admin users
   const listingTypes = user?.is_admin ? [...baseListingTypes, blogListingType] : baseListingTypes;
   
-  const categories = ['AI Tools', 'Tech', 'Side Hustles', 'Fashion', 'Learn', 'Fitness', 'Home'];
+  const categories = ['AI', 'AI Tools', 'Tech', 'Side Hustles', 'Learn', 'Fitness', 'Home'];
+  const sections = ['Affiliate', 'Marketplace', 'Dropshipping', 'Idea', 'Blog'];
   
   const b2bPlans = [
     { name: 'Free', price: '$0', features: ['10 listings', 'Basic analytics', 'Standard support'], color: 'slate' },
@@ -131,10 +133,12 @@ const SellPage = () => {
     try {
       const productData = {
         ...formData,
-        type: selectedType,
+        type: formData.section.toLowerCase(), // Use section for internal logic
         price: formData.price ? parseFloat(formData.price) : 0,
-        image_small: formData.image_small || formData.image_url,
-        image_full: formData.image_full || formData.image_url,
+        benefits: formData.why_this_product || formData.description,
+        image: formData.image_small || formData.image_url,
+        fullImage: formData.image_full || formData.image_url,
+        affiliateLink: formData.affiliate_link,
       };
       
       await api.createProduct(productData);
@@ -150,6 +154,7 @@ const SellPage = () => {
           why_this_product: '',
           price: '',
           category: 'AI Tools',
+          section: 'Affiliate',
           affiliate_link: '',
           affiliate_network: '',
           image_url: '',
@@ -422,12 +427,30 @@ const SellPage = () => {
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 className="w-full search-bar"
               >
+                <option value="" disabled>Select Category</option>
                 {categories.map(cat => (
                   <option key={cat} value={cat}>{cat}</option>
                 ))}
               </select>
             </div>
             
+            <div>
+              <label className="block text-white font-semibold mb-2">Section *</label>
+              <select
+                id="product-section"
+                name="section"
+                value={formData.section}
+                onChange={(e) => setFormData({ ...formData, section: e.target.value })}
+                className="w-full search-bar"
+              >
+                {sections.map(sec => (
+                  <option key={sec} value={sec}>{sec}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          
+          <div className="grid md:grid-cols-2 gap-6">
             <div>
               <label className="block text-white font-semibold mb-2">Price (USD)</label>
               <input
@@ -441,11 +464,24 @@ const SellPage = () => {
                 placeholder="0 for free"
               />
             </div>
+            
+            <div>
+              <label className="block text-white font-semibold mb-2">Affiliate Network</label>
+              <input
+                id="affiliate-network"
+                name="affiliate_network"
+                type="text"
+                value={formData.affiliate_network}
+                onChange={(e) => setFormData({ ...formData, affiliate_network: e.target.value })}
+                className="w-full search-bar"
+                placeholder="e.g., Amazon, CJ Affiliate, ShareASale"
+              />
+            </div>
           </div>
           
           <div>
             <label className="block text-white font-semibold mb-2">
-              {selectedType === 'blog' ? 'Blog URL' : 'Affiliate/Product Link'} *
+              {formData.section === 'Blog' ? 'Blog URL' : 'Affiliate/Product Link'} *
             </label>
             <div className="flex items-center gap-2">
               <input
@@ -456,9 +492,9 @@ const SellPage = () => {
                 value={formData.affiliate_link}
                 onChange={(e) => setFormData({ ...formData, affiliate_link: e.target.value })}
                 className="w-full search-bar"
-                placeholder={selectedType === 'blog' ? "https://yourblog.com/post" : "https://example.com?ref=yourid"}
+                placeholder={formData.section === 'Blog' ? "https://yourblog.com/post" : "https://example.com?ref=yourid"}
               />
-              {selectedType !== 'blog' && (
+              {formData.section !== 'Blog' && (
                 <button
                   type="button"
                   onClick={handleFetchMetaFromAffiliate}
@@ -471,20 +507,6 @@ const SellPage = () => {
             </div>
             {metaMessage && <p className="text-xs text-gray-300 mt-1">{metaMessage}</p>}
           </div>
-          
-          <div>
-            <label className="block text-white font-semibold mb-2">Affiliate Network</label>
-            <input
-              id="affiliate-network"
-              name="affiliate_network"
-              type="text"
-              value={formData.affiliate_network}
-              onChange={(e) => setFormData({ ...formData, affiliate_network: e.target.value })}
-              className="w-full search-bar"
-              placeholder="e.g., Amazon, CJ Affiliate, ShareASale"
-            />
-          </div>
-          
           <div>
             <label className="block text-white font-semibold mb-2">Image URL *</label>
             <input
@@ -497,7 +519,7 @@ const SellPage = () => {
               className="w-full search-bar"
               placeholder="https://images.unsplash.com/..."
             />
-            <p className="text-xs text-gray-500 mt-1">Paste exact product image URL here if scrape doesn't return it.</p>
+            <p className="text-xs text-gray-500 mt-1">Provide a working image URL for the product.</p>
           </div>
 
           <div className="grid md:grid-cols-2 gap-6 mt-3">

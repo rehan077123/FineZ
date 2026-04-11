@@ -22,16 +22,21 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [pendingProducts, setPendingProducts] = useState([]);
   const [reports, setReports] = useState([]);
+  const [providers, setProviders] = useState([{ id: 'all', name: 'All' }]);
+  const [selectedProvider, setSelectedProvider] = useState('all');
 
   const fetchAdminData = useCallback(async () => {
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      const [metricsRes, productsRes] = await Promise.all([
+      const [metricsRes, productsRes, providersRes] = await Promise.all([
         axios.get(`${BACKEND_URL}/api/admin/dashboard`, { headers }),
-        axios.get(`${BACKEND_URL}/api/admin/products/pending`, { headers })
+        axios.get(`${BACKEND_URL}/api/admin/products/pending`, { headers }),
+        axios.get(`${BACKEND_URL}/api/providers`)
       ]);
       setMetrics(metricsRes.data);
       setPendingProducts(productsRes.data);
+      const providerList = Array.isArray(providersRes.data) ? providersRes.data : [];
+      setProviders([{ id: 'all', name: 'All' }, ...providerList]);
       setLoading(false);
     } catch (error) {
       console.error('Error:', error);
@@ -68,6 +73,10 @@ const AdminDashboard = () => {
 
   if (loading) return <div className="p-20 text-center text-white">Loading Admin...</div>;
 
+  const filteredPendingProducts = selectedProvider === 'all'
+    ? pendingProducts
+    : pendingProducts.filter(p => (p.provider || 'manual') === selectedProvider);
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-8">
       <div className="max-w-7xl mx-auto">
@@ -91,19 +100,33 @@ const AdminDashboard = () => {
                   <AlertCircle className="text-amber-400 mr-2" />
                   Product Moderation Queue
                 </h3>
-                <span className="bg-amber-400 text-black text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
-                  {pendingProducts.length} Pending
-                </span>
+                <div className="flex items-center gap-3">
+                  <select
+                    value={selectedProvider}
+                    onChange={(e) => setSelectedProvider(e.target.value)}
+                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                  >
+                    {providers.map(p => (
+                      <option key={p.id} value={p.id} className="bg-[#0a0a0a]">
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="bg-amber-400 text-black text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+                    {filteredPendingProducts.length} Pending
+                  </span>
+                </div>
               </div>
               <div className="p-6">
-                {pendingProducts.length > 0 ? (
+                {filteredPendingProducts.length > 0 ? (
                   <div className="space-y-4">
-                    {pendingProducts.map(p => (
+                    {filteredPendingProducts.map(p => (
                       <div key={p.id} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
                         <div className="flex items-center space-x-4">
                           <img src={p.image_url} alt="" className="w-12 h-12 rounded-lg object-cover" />
                           <div>
                             <h4 className="font-bold">{p.title}</h4>
+                            <p className="text-xs text-gray-500">Provider: {p.provider || 'manual'}</p>
                             <p className="text-xs text-gray-500">By Seller: {p.seller_id}</p>
                           </div>
                         </div>

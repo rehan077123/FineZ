@@ -6,14 +6,18 @@ import SocialShare from '../components/SocialShare';
 import PurchaseModal from '../components/PurchaseModal';
 import ComparisonTable from '../components/ComparisonTable';
 import ReviewSection from '../components/ReviewSection';
+import AdBanner from '../components/AdBanner';
 import { api } from '../utils/api';
 
 const DEFAULT_IMAGES = {
-  'Tech': 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=800&h=500&fit=crop',
+  'AI Tools': 'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800&h=500&fit=crop',
+  'Electronics': 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=800&h=500&fit=crop',
+  'Beauty': 'https://images.unsplash.com/photo-1596462502278-27bfdc4033c8?w=800&h=500&fit=crop',
+  'Home Gadgets': 'https://images.unsplash.com/photo-1556911223-05a0a42afab8?w=800&h=500&fit=crop',
   'Fashion': 'https://images.unsplash.com/photo-1591195853828-11db59a44f6b?w=800&h=500&fit=crop',
   'Fitness': 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800&h=500&fit=crop',
-  'Home': 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800&h=500&fit=crop',
-  'Digital': 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800&h=500&fit=crop',
+  'Side Hustles': 'https://images.unsplash.com/photo-1556740758-90de374c12ad?w=800&h=500&fit=crop',
+  'Learn': 'https://images.unsplash.com/photo-1523240715630-9415511e834b?w=800&h=500&fit=crop',
 };
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
@@ -32,7 +36,6 @@ export default function ProductDetailPage() {
       try {
         setLoading(true);
         setError(null);
-        console.log('Fetching product:', id);
         const data = await api.getProduct(id);
         if (!data) {
           setError('Product not found');
@@ -40,7 +43,6 @@ export default function ProductDetailPage() {
           setProduct(data);
         }
       } catch (error) {
-        console.error('Error fetching product:', error);
         setError('Failed to load product');
       } finally {
         setLoading(false);
@@ -82,9 +84,11 @@ export default function ProductDetailPage() {
   const handleAffiliateLinkClick = async () => {
     try {
       await api.trackClick(product.id);
-      window.open(product.affiliate_link, '_blank', 'noopener,noreferrer');
+      const link = product.affiliateLink || product.affiliate_link;
+      window.open(link, '_blank', 'noopener,noreferrer');
     } catch (error) {
-      window.open(product.affiliate_link, '_blank', 'noopener,noreferrer');
+      const link = product.affiliateLink || product.affiliate_link;
+      window.open(link, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -113,7 +117,7 @@ export default function ProductDetailPage() {
           {/* Image */}
             <div className="mb-8 rounded-xl overflow-hidden border border-slate-700 bg-gray-900">
               <img
-                src={product.image_full || product.image_url || DEFAULT_IMAGES[product.category] || DEFAULT_IMAGES['Tech']}
+                src={product.fullImage || product.image_full || product.image_url || DEFAULT_IMAGES[product.category] || DEFAULT_IMAGES['Tech']}
                 alt={product.title}
                 className="w-full h-96 object-cover"
                 onError={(e) => {
@@ -135,7 +139,7 @@ export default function ProductDetailPage() {
 
               <div>
                 <h2 className="text-3xl font-bold text-white mb-2">{product.title}</h2>
-                <p className="text-amber-300 font-semibold text-lg">{product.why_this_product}</p>
+                <p className="text-amber-300 font-semibold text-lg">{product.benefits || product.why_this_product}</p>
               </div>
 
               <div className="flex items-center space-x-6 py-4 border-y border-slate-700">
@@ -148,8 +152,8 @@ export default function ProductDetailPage() {
               </div>
 
               <div>
-                <h3 className="text-white font-bold mb-3">Description</h3>
-                <p className="text-gray-300 leading-relaxed">{product.description}</p>
+                <h3 className="text-white font-bold mb-3">Benefits</h3>
+                <p className="text-gray-300 leading-relaxed">{product.benefits || product.description}</p>
               </div>
 
               {/* Additional Info */}
@@ -181,6 +185,11 @@ export default function ProductDetailPage() {
                   </span>
                 )}
               </div>
+            </div>
+            
+            {/* Ad Banner after product info */}
+            <div className="mt-8">
+              <AdBanner slot="PRODUCT_DETAIL_BOTTOM_BANNER" />
             </div>
           </div>
 

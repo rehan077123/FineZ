@@ -5,6 +5,7 @@ import "./index.css";
 
 // Pages
 import HomePage from "./pages/HomePage";
+import OutcomeStackPage from "./pages/OutcomeStackPage";
 import MarketplacePage from "./pages/MarketplacePage";
 import ProductDetailPage from "./pages/ProductDetailPage";
 import AffiliatePage from "./pages/AffiliatePage";
@@ -49,6 +50,7 @@ function App() {
 
           <Routes>
             <Route path="/" element={<HomePage />} />
+            <Route path="/stacks/:stackId" element={<OutcomeStackPage />} />
             <Route path="/marketplace" element={<MarketplacePage />} />
             <Route path="/product/:id" element={<ProductDetailPage />} />
             <Route path="/affiliate" element={<AffiliatePage />} />

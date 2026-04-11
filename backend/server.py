@@ -2,8 +2,10 @@ from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, Header, U
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+import asyncio
 import os
 import logging
+import math
 import re
 import requests
 from urllib.parse import urlparse
@@ -16,7 +18,27 @@ import jwt
 import bcrypt
 from functools import lru_cache
 import base64
+import re
+import requests
+from amazon_service import AmazonService, AMAZON_AFFILIATE_TAG
 from io import BytesIO
+from providers.registry import list_providers, get_provider
+
+# ==================== CONSTANTS ====================
+AFFILIATE_CATEGORIES = ["AI", "AI Tools", "Tech", "Side Hustles", "Learn", "Fitness", "Home"]
+PRODUCT_SECTIONS = ["Affiliate", "Marketplace", "Dropshipping", "Idea", "Blog"]
+
+ECOSYSTEM_CATEGORIES = [
+    "Shopping",
+    "AI Tools",
+    "Side Hustle",
+    "Learning",
+    "Creator Economy",
+    "SaaS",
+    "Finance",
+    "Travel",
+    "Business Tools",
+]
 
 # ==================== LOGGING CONFIG ====================
 logging.basicConfig(
@@ -254,22 +276,41 @@ class AffiliateDashboardStats(BaseModel):
     recent_referrals: List[dict] = []
 
 
+class ProviderInfo(BaseModel):
+    id: str
+    name: str
+
+
 class Product(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    provider: Optional[str] = None
     title: str
     description: str
     why_this_product: str
+    benefits: Optional[str] = None  # New field
     price: Optional[float] = None
     original_price: Optional[float] = None
     category: str
     subcategory: Optional[str] = None
     type: str
+    asin: Optional[str] = None  # New field
     affiliate_link: str
+    affiliateLink: Optional[str] = None  # New field
+    affiliateUrl: Optional[str] = None
     affiliate_network: Optional[str] = None
     seller_id: Optional[str] = None
+    sourceUrl: Optional[str] = None
+    discount: Optional[float] = None
+    badge: Optional[str] = None
+    tags: Optional[List[str]] = None
+    availability: Optional[str] = None
+    trendingScore: Optional[float] = None
+    seoSlug: Optional[str] = None
     image_url: str
+    image: Optional[str] = None  # New field (small optimized)
+    fullImage: Optional[str] = None  # New field (high res)
     image_small: Optional[str] = None
     image_full: Optional[str] = None
     featured: bool = False
@@ -278,6 +319,11 @@ class Product(BaseModel):
     clicks: int = 0
     rating: float = 0.0
     review_count: int = 0
+    # Trust Confidence Metadata for Decision Engine
+    difficulty: Optional[str] = None  # "beginner", "intermediate", "advanced"
+    roi: Optional[str] = None  # "high", "medium", "low" 
+    setupTime: Optional[str] = None  # "< 30 mins", "1-2 hours", "1-3 days"
+    earning_potential: Optional[str] = None  # ₹500-1000, ₹1k-5k, ₹5k+
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(
@@ -285,39 +331,73 @@ class Product(BaseModel):
 
 
 class ProductCreate(BaseModel):
+    provider: Optional[str] = None
     title: str
     description: str
     why_this_product: str
+    benefits: Optional[str] = None
     price: Optional[float] = None
     original_price: Optional[float] = None
     category: str
     subcategory: Optional[str] = None
     type: str
+    asin: Optional[str] = None
     affiliate_link: str
+    affiliateLink: Optional[str] = None
+    affiliateUrl: Optional[str] = None
     affiliate_network: Optional[str] = None
+    sourceUrl: Optional[str] = None
+    discount: Optional[float] = None
+    badge: Optional[str] = None
+    tags: Optional[List[str]] = None
+    availability: Optional[str] = None
+    trendingScore: Optional[float] = None
+    seoSlug: Optional[str] = None
     image_url: Optional[str] = None  # Optional if uploading image file
+    image: Optional[str] = None
+    fullImage: Optional[str] = None
     image_small: Optional[str] = None
     image_full: Optional[str] = None
     featured: bool = False
     premium: bool = False
     verified: bool = False
+    # Trust Confidence Metadata for Decision Engine
+    difficulty: Optional[str] = None  # "beginner", "intermediate", "advanced"
+    roi: Optional[str] = None  # "high", "medium", "low"
+    setupTime: Optional[str] = None  # "< 30 mins", "1-2 hours", "1-3 days"
+    earning_potential: Optional[str] = None  # ₹500-1000, ₹1k-5k, ₹5k+
 
 
 class ProductUpdate(BaseModel):
+    provider: Optional[str] = None
     title: Optional[str] = None
     description: Optional[str] = None
     why_this_product: Optional[str] = None
     price: Optional[float] = None
     original_price: Optional[float] = None
     category: Optional[str] = None
+    subcategory: Optional[str] = None
     type: Optional[str] = None
     affiliate_link: Optional[str] = None
+    affiliateUrl: Optional[str] = None
     affiliate_network: Optional[str] = None
+    sourceUrl: Optional[str] = None
+    discount: Optional[float] = None
+    badge: Optional[str] = None
+    tags: Optional[List[str]] = None
+    availability: Optional[str] = None
+    trendingScore: Optional[float] = None
+    seoSlug: Optional[str] = None
     image_url: Optional[str] = None
     image_small: Optional[str] = None
     image_full: Optional[str] = None
     featured: Optional[bool] = None
     premium: Optional[bool] = None
+    # Trust Confidence Metadata for Decision Engine
+    difficulty: Optional[str] = None  # "beginner", "intermediate", "advanced"
+    roi: Optional[str] = None  # "high", "medium", "low"
+    setupTime: Optional[str] = None  # "< 30 mins", "1-2 hours", "1-3 days"
+    earning_potential: Optional[str] = None  # ₹500-1000, ₹1k-5k, ₹5k+
 
 
 class Stats(BaseModel):
@@ -568,11 +648,701 @@ async def get_user_dashboard(
 # ==================== PRODUCT ROUTES ====================
 
 
+@api_router.get("/providers", response_model=List[ProviderInfo])
+async def get_providers():
+    return list_providers()
+
+
+def _slugify(value: str) -> str:
+    v = (value or "").lower().strip()
+    v = re.sub(r"[^a-z0-9\s-]", "", v)
+    v = re.sub(r"[\s-]+", "-", v).strip("-")
+    return v or "product"
+
+
+def _normalize_product_doc(product: dict) -> dict:
+    created_at = product.get("created_at") or product.get("createdAt")
+    updated_at = product.get("updated_at") or product.get("updatedAt")
+    if created_at and not isinstance(created_at, str):
+        created_at = created_at.isoformat()
+    if updated_at and not isinstance(updated_at, str):
+        updated_at = updated_at.isoformat()
+
+    asin = product.get("asin")
+    affiliate_network = product.get("affiliate_network") or ""
+    affiliate_link = product.get("affiliate_link") or product.get("affiliateLink") or product.get("affiliateUrl") or ""
+
+    provider = product.get("provider")
+    if not provider:
+        if asin or affiliate_network.lower() == "amazon" or "amazon." in affiliate_link.lower():
+            provider = "amazon"
+        elif affiliate_network:
+            provider = _slugify(affiliate_network)
+        else:
+            provider = "manual"
+
+    title = product.get("title") or ""
+    price = product.get("price")
+    original_price = product.get("original_price")
+    discount = product.get("discount")
+    if discount is None and isinstance(price, (int, float)) and isinstance(original_price, (int, float)):
+        discount = max(float(original_price) - float(price), 0.0)
+
+    rating = product.get("rating") or 0.0
+    reviews_count = product.get("reviewsCount")
+    if reviews_count is None:
+        reviews_count = product.get("review_count") or 0
+
+    clicks = product.get("clicks") or 0
+    trending_score = product.get("trendingScore")
+    if trending_score is None:
+        try:
+            trending_score = float(rating) * math.log(float(reviews_count) + 1.0) + (float(clicks) * 0.05)
+        except Exception:
+            trending_score = 0.0
+
+    image = product.get("image") or product.get("image_small") or product.get("image_url")
+    full_image = product.get("fullImage") or product.get("image_full") or image
+
+    affiliate_url = product.get("affiliateUrl") or product.get("affiliateLink") or product.get("affiliate_link")
+    source_url = product.get("sourceUrl") or product.get("source_url") or affiliate_link
+
+    seo_slug = product.get("seoSlug")
+    if not seo_slug:
+        seo_slug = f"{_slugify(title)}-{(product.get('id') or '')[:8]}" if product.get("id") else _slugify(title)
+
+    tags = product.get("tags")
+    if tags is None:
+        tags = []
+
+    normalized = dict(product)
+    normalized.update(
+        {
+            "provider": provider,
+            "affiliateUrl": affiliate_url,
+            "sourceUrl": source_url,
+            "image": image,
+            "fullImage": full_image,
+            "discount": discount,
+            "reviewsCount": reviews_count,
+            "clickCount": clicks,
+            "trendingScore": trending_score,
+            "seoSlug": seo_slug,
+            "created_at": created_at,
+            "updated_at": updated_at,
+            "createdAt": created_at,
+            "updatedAt": updated_at,
+            "affiliateLink": affiliate_url,
+            "affiliate_link": affiliate_url,
+            "image_url": product.get("image_url") or image,
+            "review_count": product.get("review_count") or reviews_count,
+        }
+    )
+    return normalized
+
+
+@api_router.get("/feeds/discover")
+async def get_discover_feed(
+    limit: int = Query(8, ge=1, le=20),
+):
+    base = {"verified": True}
+    sort_feed = [("featured", -1), ("trendingScore", -1), ("clicks", -1), ("created_at", -1)]
+
+    trending_now = (
+        await db.products.find(base, {"_id": 0})
+        .sort(sort_feed)
+        .limit(min(limit * 2, 20))
+        .to_list(min(limit * 2, 20))
+    )
+
+    top_picks = (
+        await db.products.find({**base, "featured": True}, {"_id": 0})
+        .sort(sort_feed)
+        .limit(limit)
+        .to_list(limit)
+    )
+
+    best_discounts = (
+        await db.products.find(
+            {
+                **base,
+                "$or": [
+                    {"discount": {"$gt": 0}},
+                    {"original_price": {"$gt": 0}},
+                ],
+            },
+            {"_id": 0},
+        )
+        .sort([("discount", -1), ("original_price", -1), ("trendingScore", -1), ("clicks", -1), ("created_at", -1)])
+        .limit(limit)
+        .to_list(limit)
+    )
+
+    ai_tools_trending = (
+        await db.products.find(
+            {
+                **base,
+                "$or": [
+                    {"category": {"$in": ["AI", "AI Tools"]}},
+                    {"tags": {"$in": ["ai", "ai-tools", "ai_tools"]}},
+                    {"provider": {"$in": ["ai-tools", "saas"]}},
+                ],
+            },
+            {"_id": 0},
+        )
+        .sort(sort_feed)
+        .limit(limit)
+        .to_list(limit)
+    )
+
+    side_hustle_tools = (
+        await db.products.find(
+            {
+                **base,
+                "$or": [
+                    {"category": {"$in": ["Side Hustles", "Side Hustle"]}},
+                    {"tags": {"$in": ["side-hustle", "side_hustle", "earning"]}},
+                    {"provider": {"$in": ["side-hustle", "marketplace", "fiverr", "upwork"]}},
+                ],
+            },
+            {"_id": 0},
+        )
+        .sort(sort_feed)
+        .limit(limit)
+        .to_list(limit)
+    )
+
+    amazon_hot_deals = (
+        await db.products.find(
+            {
+                **base,
+                "$and": [
+                    {"$or": [{"provider": "amazon"}, {"asin": {"$exists": True, "$ne": None}}]},
+                    {"$or": [{"discount": {"$gt": 0}}, {"original_price": {"$gt": 0}}]},
+                ],
+            },
+            {"_id": 0},
+        )
+        .sort([("discount", -1), ("original_price", -1), ("trendingScore", -1), ("clicks", -1), ("created_at", -1)])
+        .limit(limit)
+        .to_list(limit)
+    )
+
+    new_launches = (
+        await db.products.find(base, {"_id": 0})
+        .sort([("created_at", -1)])
+        .limit(limit)
+        .to_list(limit)
+    )
+
+    return {
+        "trendingNow": [_normalize_product_doc(p) for p in trending_now],
+        "topPicksOfWeek": [_normalize_product_doc(p) for p in top_picks],
+        "bestDiscounts": [_normalize_product_doc(p) for p in best_discounts],
+        "aiToolsTrending": [_normalize_product_doc(p) for p in ai_tools_trending],
+        "sideHustleTools": [_normalize_product_doc(p) for p in side_hustle_tools],
+        "amazonHotDeals": [_normalize_product_doc(p) for p in amazon_hot_deals],
+        "newLaunches": [_normalize_product_doc(p) for p in new_launches],
+    }
+
+
+@api_router.get("/feeds/top-picks")
+async def get_top_picks_feed(limit: int = Query(12, ge=1, le=30)):
+    base = {"verified": True}
+    sort_feed = [("featured", -1), ("trendingScore", -1), ("clicks", -1), ("created_at", -1)]
+
+    by_trend = (
+        await db.products.find(base, {"_id": 0})
+        .sort(sort_feed)
+        .limit(limit)
+        .to_list(limit)
+    )
+    by_clicks = (
+        await db.products.find(base, {"_id": 0})
+        .sort([("clicks", -1), ("trendingScore", -1), ("created_at", -1)])
+        .limit(limit)
+        .to_list(limit)
+    )
+    by_discounts = (
+        await db.products.find(
+            {**base, "$or": [{"discount": {"$gt": 0}}, {"original_price": {"$gt": 0}}]},
+            {"_id": 0},
+        )
+        .sort([("discount", -1), ("original_price", -1), ("trendingScore", -1), ("clicks", -1), ("created_at", -1)])
+        .limit(limit)
+        .to_list(limit)
+    )
+
+    merged: List[dict] = []
+    seen = set()
+    for lst in (by_trend, by_clicks, by_discounts):
+        for p in lst:
+            pid = p.get("id")
+            if not pid or pid in seen:
+                continue
+            seen.add(pid)
+            merged.append(_normalize_product_doc(p))
+            if len(merged) >= limit:
+                return {"topPicks": merged}
+
+    return {"topPicks": merged}
+
+
+async def _feed_list(
+    *,
+    type: Optional[str] = None,
+    category: Optional[str] = None,
+    provider: Optional[str] = None,
+    limit: int = 20,
+):
+    base: dict = {"verified": True}
+    if type:
+        base["type"] = type
+    if category and category.lower() != "all":
+        base["category"] = category
+
+    provider_clause = None
+    if provider and provider.lower() != "all":
+        if provider == "amazon":
+            provider_clause = {"$or": [{"provider": "amazon"}, {"asin": {"$exists": True, "$ne": None}}]}
+        else:
+            provider_clause = {"provider": provider}
+
+    query = base
+    if provider_clause:
+        query = {"$and": [provider_clause, base]}
+
+    sort_feed = [("featured", -1), ("trendingScore", -1), ("clicks", -1), ("created_at", -1)]
+    docs = (
+        await db.products.find(query, {"_id": 0})
+        .sort(sort_feed)
+        .limit(limit)
+        .to_list(limit)
+    )
+    return [_normalize_product_doc(p) for p in docs]
+
+
+@api_router.get("/feeds/amazon-products")
+async def get_amazon_products():
+    """Get mock Amazon products with affiliate links for instant display"""
+    return [
+        {
+            "_id": "asin_B0D2YLQX53",
+            "title": "MacBook Pro 14-inch M3 Max",
+            "description": "Powerful laptop for professionals",
+            "image_url": "https://m.media-amazon.com/images/I/71r1tPHMp7L._SX679_.jpg",
+            "category": "Electronics",
+            "sources": [{
+                "source": "amazon",
+                "affiliate_url": "https://www.amazon.in/dp/B0D2YLQX53?tag=finezapp-21",
+                "price": 139999,
+                "commission_percentage": 5.0
+            }],
+            "rating": 4.8,
+            "reviews": 240
+        },
+        {
+            "_id": "asin_B0CVHKV7CJ",
+            "title": "iPad Pro 12.9 2024",
+            "description": "Latest iPad Pro with M4 chip",
+            "image_url": "https://m.media-amazon.com/images/I/71xb2xkN5UL._SX679_.jpg",
+            "category": "Electronics",
+            "sources": [{
+                "source": "amazon",
+                "affiliate_url": "https://www.amazon.in/dp/B0CVHKV7CJ?tag=finezapp-21",
+                "price": 89999,
+                "commission_percentage": 5.0
+            }],
+            "rating": 4.7,
+            "reviews": 380
+        },
+        {
+            "_id": "asin_B0CHX1DTXY",
+            "title": "iPhone 15 Pro",
+            "description": "Latest iPhone with A17 Pro chip",
+            "image_url": "https://m.media-amazon.com/images/I/71YLYQBP0pL._SX679_.jpg",
+            "category": "Smartphones",
+            "sources": [{
+                "source": "amazon",
+                "affiliate_url": "https://www.amazon.in/dp/B0CHX1DTXY?tag=finezapp-21",
+                "price": 99999,
+                "commission_percentage": 5.0
+            }],
+            "rating": 4.9,
+            "reviews": 520
+        },
+        {
+            "_id": "asin_B0B8NQXJG7",
+            "title": "Samsung 55-inch 4K TV",
+            "description": "Ultra HD Smart TV with QLED",
+            "image_url": "https://m.media-amazon.com/images/I/81VJ1eV5a6L._SX679_.jpg",
+            "category": "Electronics",
+            "sources": [{
+                "source": "amazon",
+                "affiliate_url": "https://www.amazon.in/dp/B0B8NQXJG7?tag=finezapp-21",
+                "price": 54999,
+                "commission_percentage": 5.0
+            }],
+            "rating": 4.6,
+            "reviews": 180
+        },
+        {
+            "_id": "asin_chatgpt",
+            "title": "ChatGPT Plus Subscription",
+            "description": "Premium AI assistant with GPT-4 access",
+            "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/ChatGPT_logo.svg/1200px-ChatGPT_logo.svg.png",
+            "category": "AI Tools",
+            "sources": [{
+                "source": "amazon",
+                "affiliate_url": "https://www.amazon.in/dp/B0D2YLQX53?tag=finezapp-21",
+                "price": 999,
+                "commission_percentage": 5.0
+            }],
+            "rating": 4.8,
+            "reviews": 890
+        },
+        {
+            "_id": "asin_midjourney",
+            "title": "Midjourney AI Subscription",
+            "description": "AI image generation at its finest",
+            "image_url": "https://images.unsplash.com/photo-1609042231692-abc5c9a9d397?w=500&h=500&fit=crop",
+            "category": "AI Tools",
+            "sources": [{
+                "source": "amazon",
+                "affiliate_url": "https://www.amazon.in/dp/B0D2YLQX53?tag=finezapp-21",
+                "price": 1099,
+                "commission_percentage": 5.0
+            }],
+            "rating": 4.7,
+            "reviews": 650
+        },
+        {
+            "_id": "asin_B07N4PLXFD",
+            "title": "COSORI Air Fryer",
+            "description": "5.8L Electric Air Fryer",
+            "image_url": "https://m.media-amazon.com/images/I/81FNMy6UYIL._SX679_.jpg",
+            "category": "Home & Kitchen",
+            "sources": [{
+                "source": "amazon",
+                "affiliate_url": "https://www.amazon.in/dp/B07N4PLXFD?tag=finezapp-21",
+                "price": 4999,
+                "commission_percentage": 5.0
+            }],
+            "rating": 4.6,
+            "reviews": 1200
+        },
+        {
+            "_id": "asin_B00FLYWNYQ",
+            "title": "Instant Pot Duo 7-in-1",
+            "description": "Multi-cooker for busy families",
+            "image_url": "https://m.media-amazon.com/images/I/71zrOr0qXaL._SX679_.jpg",
+            "category": "Home & Kitchen",
+            "sources": [{
+                "source": "amazon",
+                "affiliate_url": "https://www.amazon.in/dp/B00FLYWNYQ?tag=finezapp-21",
+                "price": 8999,
+                "commission_percentage": 5.0
+            }],
+            "rating": 4.7,
+            "reviews": 890
+        },
+        {
+            "_id": "asin_B09N9FBKMT",
+            "title": "Dyson V15 Detect Vacuum",
+            "description": "Cordless vacuum cleaner",
+            "image_url": "https://m.media-amazon.com/images/I/71WcbLEMQDL._SX679_.jpg",
+            "category": "Home & Kitchen",
+            "sources": [{
+                "source": "amazon",
+                "affiliate_url": "https://www.amazon.in/dp/B09N9FBKMT?tag=finezapp-21",
+                "price": 59999,
+                "commission_percentage": 5.0
+            }],
+            "rating": 4.8,
+            "reviews": 450
+        },
+        {
+            "_id": "asin_B0CDSLL37F",
+            "title": "Apple Watch Series 9",
+            "description": "Advanced smartwatch",
+            "image_url": "https://m.media-amazon.com/images/I/71TbJ5XgH7L._SX679_.jpg",
+            "category": "Smartwatches",
+            "sources": [{
+                "source": "amazon",
+                "affiliate_url": "https://www.amazon.in/dp/B0CDSLL37F?tag=finezapp-21",
+                "price": 39999,
+                "commission_percentage": 5.0
+            }],
+            "rating": 4.6,
+            "reviews": 340
+        },
+        {
+            "_id": "asin_B0CWJQ5BXZ",
+            "title": "Fitbit Charge 6",
+            "description": "Fitness tracker with Google",
+            "image_url": "https://m.media-amazon.com/images/I/81XQrMR1HbL._SX679_.jpg",
+            "category": "Fitness",
+            "sources": [{
+                "source": "amazon",
+                "affiliate_url": "https://www.amazon.in/dp/B0CWJQ5BXZ?tag=finezapp-21",
+                "price": 14999,
+                "commission_percentage": 5.0
+            }],
+            "rating": 4.5,
+            "reviews": 220
+        },
+        {
+            "_id": "asin_B0BJ2N3K4H",
+            "title": "Liforme Yoga Mat",
+            "description": "Eco-friendly yoga mat",
+            "image_url": "https://m.media-amazon.com/images/I/91nGqqGr-bL._SX679_.jpg",
+            "category": "Fitness",
+            "sources": [{
+                "source": "amazon",
+                "affiliate_url": "https://www.amazon.in/dp/B0BJ2N3K4H?tag=finezapp-21",
+                "price": 4999,
+                "commission_percentage": 5.0
+            }],
+            "rating": 4.7,
+            "reviews": 780
+        }
+    ]
+
+@api_router.get("/feeds/affiliate")
+async def get_affiliate_feed(
+    category: Optional[str] = Query(None),
+    provider: Optional[str] = Query(None),
+    limit: int = Query(20, ge=1, le=50),
+):
+    products = await _feed_list(type="affiliate", category=category, provider=provider, limit=limit)
+    return {"products": products}
+
+
+@api_router.get("/feeds/marketplace")
+async def get_marketplace_feed(
+    category: Optional[str] = Query(None),
+    limit: int = Query(20, ge=1, le=50),
+):
+    products = await _feed_list(type="marketplace", category=category, limit=limit)
+    return {"products": products}
+
+
+@api_router.get("/feeds/dropship")
+async def get_dropship_feed(
+    category: Optional[str] = Query(None),
+    limit: int = Query(20, ge=1, le=50),
+):
+    products = await _feed_list(type="dropshipping", category=category, limit=limit)
+    return {"products": products}
+
+
+@api_router.get("/feeds/ideas")
+async def get_ideas_feed(
+    category: Optional[str] = Query(None),
+    limit: int = Query(20, ge=1, le=50),
+):
+    products = await _feed_list(type="idea", category=category, limit=limit)
+    return {"products": products}
+
+# ==================== OUTCOME STACKS (Decision Engine) ====================
+
+@api_router.get("/stacks/outcomes")
+async def get_outcome_stacks():
+    """Return all available outcome-based stacks for decision discovery."""
+    return {
+        "stacks": [
+            {
+                "id": "dropshipping-2026",
+                "title": "Start Dropshipping in 2026",
+                "icon": "📦",
+                "description": "Complete stack to launch your first store",
+                "roi": "High",
+                "setupTime": "1-2 weeks",
+                "difficulty": "Beginner",
+                "earning": "₹10k–₹50k/month",
+                "color": "from-blue-600 to-blue-400"
+            },
+            {
+                "id": "ai-creator-stack",
+                "title": "AI Creator Monetization Stack",
+                "icon": "🤖",
+                "description": "Tools to make money with AI-generated content",
+                "roi": "Very High",
+                "setupTime": "3-5 days",
+                "difficulty": "Beginner-friendly",
+                "earning": "₹5k–₹25k/month",
+                "color": "from-purple-600 to-purple-400"
+            },
+            {
+                "id": "affiliate-mastery",
+                "title": "Affiliate Marketing Mastery",
+                "icon": "💰",
+                "description": "Launch high-converting affiliate revenue",
+                "roi": "Medium",
+                "setupTime": "2-3 weeks",
+                "difficulty": "Intermediate",
+                "earning": "₹3k–₹15k/month",
+                "color": "from-amber-600 to-amber-400"
+            },
+            {
+                "id": "youtube-automation",
+                "title": "YouTube Automation Setup",
+                "icon": "📹",
+                "description": "Build passive income YouTube channel",
+                "roi": "High",
+                "setupTime": "1 week",
+                "difficulty": "Beginner",
+                "earning": "₹8k–₹40k/month",
+                "color": "from-red-600 to-red-400"
+            },
+            {
+                "id": "budget-office-setup",
+                "title": "₹10k Home Office Setup",
+                "icon": "🏠",
+                "description": "Essential gear for remote work + earning",
+                "roi": "Medium",
+                "setupTime": "Same day",
+                "difficulty": "Beginner",
+                "earning": "Productivity focused",
+                "color": "from-green-600 to-green-400"
+            },
+            {
+                "id": "gym-transformation",
+                "title": "Gym Transformation Starter Kit",
+                "icon": "💪",
+                "description": "Build fitness + monetize through fitness",
+                "roi": "Medium",
+                "setupTime": "1 week",
+                "difficulty": "Beginner",
+                "earning": "₹2k–₹8k/month",
+                "color": "from-orange-600 to-orange-400"
+            }
+        ]
+    }
+
+@api_router.get("/stacks/outcomes/{stack_id}")
+async def get_outcome_stack_details(stack_id: str, limit: int = Query(12, ge=1, le=50)):
+    """Get products + guides + workflows for a specific outcome stack."""
+    base = {"verified": True}
+    
+    # Map stack to product categories/tags
+    stack_mapping = {
+        "dropshipping-2026": ["dropshipping"],
+        "ai-creator-stack": ["AI", "AI Tools"],
+        "affiliate-mastery": ["affiliate"],
+        "youtube-automation": ["video", "automation"],
+        "budget-office-setup": ["tech", "office"],
+        "gym-transformation": ["fitness"]
+    }
+    
+    categories = stack_mapping.get(stack_id, [])
+    if not categories:
+        raise HTTPException(status_code=404, detail="Stack not found")
+    
+    # Get curated products for this stack
+    products = await db.products.find(
+        {
+            **base,
+            "$or": [
+                {"category": {"$in": categories}},
+                {"tags": {"$in": categories}}
+            ]
+        },
+        {"_id": 0}
+    ).sort([("trendingScore", -1), ("clicks", -1)]).limit(limit).to_list(limit)
+    
+    return {
+        "stack_id": stack_id,
+        "products": [_normalize_product_doc(p) for p in products],
+        "workflow": {
+            "steps": [
+                {"order": 1, "title": "Choose Tools", "guide": f"Select the best tools for {stack_id}"},
+                {"order": 2, "title": "Setup", "guide": "Complete the initial onboarding"},
+                {"order": 3, "title": "Launch", "guide": "Go live with your stack"},
+                {"order": 4, "title": "Scale", "guide": "Optimize and grow"}
+            ]
+        }
+    }
+
+@api_router.post("/stacks/track-engagement")
+async def track_stack_engagement(
+    stack_id: str = Query(...),
+    action: str = Query(...),  # view, explore, add_to_cart, purchase
+):
+    """Track user engagement with outcome stacks for data feedback loop."""
+    engagement = {
+        "stack_id": stack_id,
+        "action": action,
+        "timestamp": datetime.now(timezone.utc),
+        "user_ip": "127.0.0.1"
+    }
+    await db.stack_engagements.insert_one(engagement)
+    return {"success": True}
+
+@api_router.get("/admin/stacks/analytics")
+async def get_stack_analytics(user_id: str = Depends(get_current_user)):
+    """Admin endpoint to view stack performance for the feedback loop."""
+    admin_user = await db.users.find_one({"id": user_id, "is_admin": True})
+    if not admin_user:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    analytics = await db.stack_engagements.aggregate([
+        {"$group": {
+            "_id": "$stack_id",
+            "total_views": {"$sum": {"$cond": [{"$eq": ["$action", "view"]}, 1, 0]}},
+            "explorations": {"$sum": {"$cond": [{"$eq": ["$action", "explore"]}, 1, 0]}},
+            "conversions": {"$sum": {"$cond": [{"$eq": ["$action", "purchase"]}, 1, 0]}}
+        }}
+    ]).to_list(100)
+    
+    return {"stack_performance": analytics}
+
+@api_router.post("/admin/providers/{provider_id}/sync")
+async def admin_sync_provider(
+    provider_id: str,
+    category: str = Query("Shopping"),
+    subcategory: Optional[str] = Query(None),
+    limit: int = Query(10, ge=1, le=10),
+    user_id: str = Depends(get_current_user),
+):
+    admin_user = await db.users.find_one({"id": user_id, "is_admin": True})
+    if not admin_user:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    try:
+        provider = get_provider(provider_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    products = await provider.fetch_trending(category=category, subcategory=subcategory, limit=limit)
+    now = datetime.now(timezone.utc).isoformat()
+    upserted = 0
+
+    for p in products:
+        asin = p.get("asin")
+        stable_id = f"{provider_id}:{asin}" if asin else f"{provider_id}:{p.get('seoSlug') or str(uuid.uuid4())}"
+        p["id"] = stable_id
+        p["provider"] = provider_id
+        p["verified"] = True
+        p["created_at"] = p.get("created_at") or p.get("createdAt") or now
+        p["updated_at"] = now
+        p["image_url"] = p.get("image_url") or p.get("image") or p.get("fullImage") or ""
+        p["affiliate_link"] = p.get("affiliate_link") or p.get("affiliateUrl") or p.get("affiliateLink") or ""
+        p["affiliateLink"] = p.get("affiliateLink") or p.get("affiliateUrl") or p.get("affiliate_link") or ""
+        p["type"] = p.get("type") or "affiliate"
+        p["why_this_product"] = p.get("why_this_product") or "Amazon trending pick"
+
+        await db.products.update_one({"id": stable_id}, {"$set": p, "$setOnInsert": {"created_at": p["created_at"]}}, upsert=True)
+        upserted += 1
+
+    return {"provider": provider_id, "category": category, "subcategory": subcategory, "upserted": upserted}
+
 @api_router.get("/products")
 async def get_products(
     search: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     type: Optional[str] = Query(None),
+    provider: Optional[str] = Query(None),
     featured: Optional[bool] = Query(None),
     new: Optional[bool] = Query(None),
     limit: int = Query(100, le=100),
@@ -593,6 +1363,13 @@ async def get_products(
     if type and type.lower() != "all":
         query["type"] = type
 
+    provider_clause = None
+    if provider and provider.lower() != "all":
+        if provider == "amazon":
+            provider_clause = {"$or": [{"provider": "amazon"}, {"asin": {"$exists": True, "$ne": None}}]}
+        else:
+            provider_clause = {"provider": provider}
+
     if featured is not None:
         query["featured"] = featured
 
@@ -600,8 +1377,16 @@ async def get_products(
         seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
         query["created_at"] = {"$gte": seven_days_ago.isoformat()}
 
-    # Only return verified products to public
     query["verified"] = True
+
+    if provider_clause:
+        if "$or" in query:
+            search_or = query.pop("$or")
+            base = dict(query)
+            query = {"$and": [provider_clause, {"$or": search_or}, base]}
+        else:
+            base = dict(query)
+            query = {"$and": [provider_clause, base]}
 
     products = (
         await db.products.find(query, {"_id": 0})
@@ -611,15 +1396,9 @@ async def get_products(
         .to_list(limit)
     )
 
-    # Convert datetime fields to strings for JSON serialization
     result = []
     for product in products:
-        if product.get("created_at") and not isinstance(product.get("created_at"), str):
-            product["created_at"] = product["created_at"].isoformat()
-        if product.get("updated_at") and not isinstance(product.get("updated_at"), str):
-            product["updated_at"] = product["updated_at"].isoformat()
-
-        result.append(product)
+        result.append(_normalize_product_doc(product))
 
     return result
 
@@ -725,24 +1504,30 @@ async def scrape_product(request: ScrapeRequest):
 
 
 @api_router.get("/products/featured", response_model=List[Product])
-async def get_featured_products(limit: int = Query(6, le=20)):
+async def get_featured_products(limit: int = Query(8, le=20)):
+    """
+    On Discover page:
+    - automatically show top featured products from all sections
+    - use featured + trending score (clicks)
+    - update automatically when new products added
+    - show top 8 products
+    - latest trending first
+    """
     products = (
         await db.products.find({"featured": True, "verified": True}, {"_id": 0})
-        .sort("clicks", -1)
+        .sort([("featured", -1), ("trendingScore", -1), ("clicks", -1), ("created_at", -1)])
         .limit(limit)
         .to_list(limit)
     )
-
+    
+    # Convert datetime fields to strings
     for product in products:
-        if isinstance(product.get("created_at"), str):
-            product["created_at"] = datetime.fromisoformat(
-                product["created_at"])
-        if isinstance(product.get("updated_at"), str):
-            product["updated_at"] = datetime.fromisoformat(
-                product["updated_at"])
-
+        if product.get("created_at") and not isinstance(product.get("created_at"), str):
+            product["created_at"] = product["created_at"].isoformat()
+        if product.get("updated_at") and not isinstance(product.get("updated_at"), str):
+            product["updated_at"] = product["updated_at"].isoformat()
+            
     return products
-
 
 @api_router.get("/products/{product_id}", response_model=Product)
 async def get_product(product_id: str):
@@ -759,10 +1544,89 @@ async def get_product(product_id: str):
     return product
 
 
+# ==================== AMAZON UTILITIES ====================
+
+def extract_asin(url: str) -> Optional[str]:
+    """Extract ASIN from an Amazon URL."""
+    return AmazonService.extract_asin(url)
+
+def generate_amazon_affiliate_link(asin: str) -> str:
+    """Generate a clean Amazon affiliate link using the ASIN."""
+    return AmazonService.generate_affiliate_link(asin)
+
+@api_router.post("/products/recheck")
+async def recheck_all_products(user_id: str = Depends(get_current_user)):
+    """Manually trigger a recheck of all Amazon products to remove dead ones."""
+    # Only allow admin or specific users if needed
+    cursor = db.products.find({"asin": {"$exists": True, "$ne": None}})
+    removed_count = 0
+    total_checked = 0
+    
+    async for product in cursor:
+        total_checked += 1
+        asin = product.get("asin")
+        if not asin:
+            continue
+            
+        result = AmazonService.verify_availability(asin)
+        
+        if not result["available"]:
+            logger.info(f"Removing dead Amazon product: {asin} - {result.get('reason')}")
+            await db.products.delete_one({"id": product["id"]})
+            removed_count += 1
+        else:
+            # Update price/image if they changed
+            updates = {
+                "price": result["price"],
+                "image": result["image"],
+                "fullImage": result["fullImage"],
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.products.update_one({"id": product["id"]}, {"$set": updates})
+            
+    return {
+        "status": "success",
+        "total_checked": total_checked,
+        "removed_dead_products": removed_count
+    }
+
 @api_router.post("/products", response_model=Product)
 async def create_product(product_input: ProductCreate, user_id: str = Depends(get_current_user)):
     """Create a new product - requires authentication. Stores seller_id automatically."""
     product_dict = product_input.model_dump()
+    
+    # Amazon ASIN and link extraction/generation
+    raw_link = product_dict.get("affiliate_link") or product_dict.get("affiliateLink") or product_dict.get("affiliateUrl")
+    if raw_link:
+        product_dict["affiliate_link"] = raw_link
+        product_dict["affiliateLink"] = raw_link
+        product_dict["affiliateUrl"] = product_dict.get("affiliateUrl") or raw_link
+        product_dict["sourceUrl"] = product_dict.get("sourceUrl") or raw_link
+    asin = extract_asin(raw_link)
+    
+    if asin:
+        # RULES: 1, 2, 3, 4 - Verify before saving
+        result = AmazonService.verify_availability(asin)
+        if not result["available"]:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Amazon product is not available or invalid: {result.get('reason')}"
+            )
+        
+        product_dict["asin"] = asin
+        product_dict["provider"] = product_dict.get("provider") or "amazon"
+        product_dict["affiliateLink"] = generate_amazon_affiliate_link(asin)
+        product_dict["affiliate_link"] = product_dict["affiliateLink"]
+        product_dict["affiliateUrl"] = product_dict["affiliateLink"]
+        product_dict["sourceUrl"] = product_dict.get("sourceUrl") or f"https://www.amazon.in/dp/{asin}"
+        product_dict["price"] = result["price"]
+        product_dict["image"] = result["image"]
+        product_dict["fullImage"] = result["fullImage"]
+        product_dict["image_url"] = product_dict.get("image_url") or result["image"]
+        product_dict["title"] = result["title"] or product_dict["title"]
+    else:
+        product_dict["provider"] = product_dict.get("provider") or "manual"
+    
     product_dict["seller_id"] = user_id  # Automatically assign seller
     product_obj = Product(**product_dict)
 
@@ -797,6 +1661,37 @@ async def update_product(product_id: str, product_update: ProductUpdate, user_id
     update_data = {
         k: v for k, v in product_update.model_dump().items() if v is not None
     }
+    
+    # Handle Amazon link updates
+    raw_link = update_data.get("affiliate_link") or update_data.get("affiliateLink") or update_data.get("affiliateUrl")
+    if raw_link:
+        update_data["affiliate_link"] = raw_link
+        update_data["affiliateLink"] = raw_link
+        update_data["affiliateUrl"] = update_data.get("affiliateUrl") or raw_link
+        update_data["sourceUrl"] = update_data.get("sourceUrl") or raw_link
+        asin = extract_asin(raw_link)
+        if asin:
+            result = AmazonService.verify_availability(asin)
+            if result["available"]:
+                update_data["asin"] = asin
+                update_data["provider"] = update_data.get("provider") or "amazon"
+                update_data["affiliateLink"] = generate_amazon_affiliate_link(asin)
+                update_data["affiliate_link"] = update_data["affiliateLink"]
+                update_data["affiliateUrl"] = update_data["affiliateLink"]
+                update_data["sourceUrl"] = update_data.get("sourceUrl") or f"https://www.amazon.in/dp/{asin}"
+                update_data["price"] = result["price"]
+                update_data["image"] = result["image"]
+                update_data["fullImage"] = result["fullImage"]
+                update_data["image_url"] = update_data.get("image_url") or result["image"]
+                update_data["title"] = result["title"] or update_data.get("title")
+            else:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Amazon product is not available or invalid: {result.get('reason')}"
+                )
+        else:
+            update_data["provider"] = update_data.get("provider") or existing.get("provider") or "manual"
+
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     await db.products.update_one({"id": product_id}, {"$set": update_data})
@@ -1752,6 +2647,52 @@ async def get_sitemap():
 
 
 # ==================== APP CONFIG ====================
+
+
+async def _upsert_synced_products(provider_id: str, products: List[dict]) -> int:
+    now = datetime.now(timezone.utc).isoformat()
+    upserted = 0
+    for p in products:
+        asin = p.get("asin")
+        stable_id = f"{provider_id}:{asin}" if asin else f"{provider_id}:{p.get('seoSlug') or str(uuid.uuid4())}"
+        p["id"] = stable_id
+        p["provider"] = provider_id
+        p["verified"] = True
+        p["created_at"] = p.get("created_at") or p.get("createdAt") or now
+        p["updated_at"] = now
+        p["image_url"] = p.get("image_url") or p.get("image") or p.get("fullImage") or ""
+        p["affiliate_link"] = p.get("affiliate_link") or p.get("affiliateUrl") or p.get("affiliateLink") or ""
+        p["affiliateLink"] = p.get("affiliateLink") or p.get("affiliateUrl") or p.get("affiliate_link") or ""
+        p["affiliateUrl"] = p.get("affiliateUrl") or p.get("affiliateLink") or p.get("affiliate_link") or ""
+        p["type"] = p.get("type") or "affiliate"
+        p["why_this_product"] = p.get("why_this_product") or "Amazon trending pick"
+        await db.products.update_one({"id": stable_id}, {"$set": p, "$setOnInsert": {"created_at": p["created_at"]}}, upsert=True)
+        upserted += 1
+    return upserted
+
+
+async def _amazon_auto_sync_loop() -> None:
+    interval_minutes = int(os.environ.get("AMAZON_AUTO_SYNC_INTERVAL_MINUTES", "360"))
+    category = os.environ.get("AMAZON_AUTO_SYNC_CATEGORY", "Shopping")
+    subcategories_env = os.environ.get("AMAZON_AUTO_SYNC_SUBCATEGORIES", "Tech,Home,Fitness")
+    subcategories = [s.strip() for s in subcategories_env.split(",") if s.strip()]
+
+    while True:
+        try:
+            provider = get_provider("amazon")
+            for sub in subcategories:
+                products = await provider.fetch_trending(category=category, subcategory=sub, limit=10)
+                await _upsert_synced_products("amazon", products)
+        except Exception as e:
+            logger.error(f"Amazon auto sync failed: {e}")
+        await asyncio.sleep(max(interval_minutes, 5) * 60)
+
+
+@app.on_event("startup")
+async def startup_tasks():
+    enabled = os.environ.get("AMAZON_AUTO_SYNC_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+    if enabled:
+        asyncio.create_task(_amazon_auto_sync_loop())
 
 
 app.include_router(api_router, prefix="/api")

@@ -11,20 +11,17 @@ const DropshipPage = () => {
   
   const categories = ['All', 'Tech', 'Fashion', 'Fitness', 'Home'];
   
-// ✅ FIRST define function
-const loadProducts = useCallback(async () => {
-  try {
-    setLoading(true);
-
-    const data = await api.getProducts({ type: "affiliate" });
-
-    setProducts(Array.isArray(data) ? data : data.products || []);
-  } catch (error) {
-    console.error("Error loading affiliate products:", error);
-  } finally {
-    setLoading(false);
-  }
-}, []);
+  const loadProducts = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await api.getProducts({ type: "dropshipping" });
+      setProducts(Array.isArray(data) ? data : data.products || []);
+    } catch (error) {
+      console.error("Error loading dropship products:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
 
 // ✅ THEN useEffect

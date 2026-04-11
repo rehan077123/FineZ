@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Search, ShoppingCart } from 'lucide-react';
 import ProductCard from '@/components/ProductCard';
+import AdBanner from '@/components/AdBanner';
 import { api } from '@/utils/api';
 
 const MarketplacePage = () => {
@@ -11,7 +12,7 @@ const MarketplacePage = () => {
   const [showNew, setShowNew] = useState(false);
   const [loading, setLoading] = useState(true);
   
-  const categories = ['All', 'AI Tools', 'Tech', 'Side Hustles', 'Fashion', 'Learn', 'Fitness', 'Home'];
+  const categories = ['All', 'AI', 'AI Tools', 'Tech', 'Side Hustles', 'Learn', 'Fitness', 'Home'];
   const types = [
     { id: 'all', name: 'Everything', icon: '✨' },
     { id: 'affiliate', name: 'Affiliate', icon: '🔗' },
@@ -64,6 +65,11 @@ useEffect(() => {
           <p className="text-sm text-amber-300 mt-2">
             This page contains affiliate links. <a href="/disclaimer" className="underline">Learn more</a>
           </p>
+        </div>
+        
+        {/* Ad Banner after header */}
+        <div className="mb-12">
+          <AdBanner slot="MARKETPLACE_TOP_BANNER" />
         </div>
         
         {/* Search */}
@@ -124,6 +130,11 @@ useEffect(() => {
               {category}
             </button>
           ))}
+        </div>
+        
+        {/* Mid-page Ad Banner */}
+        <div className="mb-12">
+          <AdBanner slot="MARKETPLACE_MIDDLE_BANNER" />
         </div>
         
         {/* Products Grid */}

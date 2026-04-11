@@ -6,7 +6,7 @@ const SocialShare = ({ product }) => {
   const [isOpen, setIsOpen] = useState(false);
   
   const shareUrl = `${window.location.origin}/?product=${product.id}`;
-  const shareText = `Check out ${product.title} on FineZ! ${product.why_this_product}`;
+  const shareText = `Check out ${product.title} on FineZ! ${product.benefits || product.why_this_product}`;
   
   const copyToClipboard = () => {
     navigator.clipboard.writeText(shareUrl);

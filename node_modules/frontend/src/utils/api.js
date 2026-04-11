@@ -15,6 +15,21 @@ export const api = {
     const response = await axios.get(`${API}/products/featured`, { params: { limit } });
     return response.data;
   },
+
+  getDiscoverFeed: async (limit = 8) => {
+    const response = await axios.get(`${API}/feeds/discover`, { params: { limit } });
+    return response.data;
+  },
+
+  getTopPicksFeed: async (limit = 12) => {
+    const response = await axios.get(`${API}/feeds/top-picks`, { params: { limit } });
+    return response.data;
+  },
+
+  getProviders: async () => {
+    const response = await axios.get(`${API}/providers`);
+    return response.data;
+  },
   
   getProduct: async (id) => {
     const response = await axios.get(`${API}/products/${id}`);
