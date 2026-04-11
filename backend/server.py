@@ -812,6 +812,42 @@ async def get_discover_feed(
         .to_list(limit)
     )
 
+    # ✨ NEW: Affiliate opportunity/ideas
+    affiliate_ideas = (
+        await db.products.find(
+            {
+                **base,
+                "$or": [
+                    {"category": {"$in": ["Affiliate", "affiliate"]}},
+                    {"tags": {"$in": ["affiliate", "affiliate-marketing", "commission"]}},
+                    {"type": "affiliate"},
+                ],
+            },
+            {"_id": 0},
+        )
+        .sort(sort_feed)
+        .limit(limit)
+        .to_list(limit)
+    )
+
+    # ✨ NEW: Dropshipping focused products
+    dropshipping_ideas = (
+        await db.products.find(
+            {
+                **base,
+                "$or": [
+                    {"category": {"$in": ["Dropshipping", "dropshipping"]}},
+                    {"tags": {"$in": ["dropshipping", "dropship", "ecommerce"]}},
+                    {"type": "dropshipping"},
+                ],
+            },
+            {"_id": 0},
+        )
+        .sort(sort_feed)
+        .limit(limit)
+        .to_list(limit)
+    )
+
     amazon_hot_deals = (
         await db.products.find(
             {
@@ -841,6 +877,8 @@ async def get_discover_feed(
         "bestDiscounts": [_normalize_product_doc(p) for p in best_discounts],
         "aiToolsTrending": [_normalize_product_doc(p) for p in ai_tools_trending],
         "sideHustleTools": [_normalize_product_doc(p) for p in side_hustle_tools],
+        "affiliateIdeas": [_normalize_product_doc(p) for p in affiliate_ideas],
+        "dropshippingIdeas": [_normalize_product_doc(p) for p in dropshipping_ideas],
         "amazonHotDeals": [_normalize_product_doc(p) for p in amazon_hot_deals],
         "newLaunches": [_normalize_product_doc(p) for p in new_launches],
     }
@@ -1227,12 +1265,12 @@ async def get_outcome_stack_details(stack_id: str, limit: int = Query(12, ge=1, 
     
     # Map stack to product categories/tags
     stack_mapping = {
-        "dropshipping-2026": ["dropshipping"],
-        "ai-creator-stack": ["AI", "AI Tools"],
-        "affiliate-mastery": ["affiliate"],
-        "youtube-automation": ["video", "automation"],
-        "budget-office-setup": ["tech", "office"],
-        "gym-transformation": ["fitness"]
+        "dropshipping-2026": ["Electronics", "Smartphones"],
+        "ai-creator-stack": ["AI Tools"],
+        "affiliate-mastery": ["Electronics", "Home & Kitchen"],
+        "youtube-automation": ["Electronics"],
+        "budget-office-setup": ["Home & Kitchen", "Electronics"],
+        "gym-transformation": ["Fitness", "Smartwatches"]
     }
     
     categories = stack_mapping.get(stack_id, [])
@@ -1265,11 +1303,14 @@ async def get_outcome_stack_details(stack_id: str, limit: int = Query(12, ge=1, 
     }
 
 @api_router.post("/stacks/track-engagement")
-async def track_stack_engagement(
-    stack_id: str = Query(...),
-    action: str = Query(...),  # view, explore, add_to_cart, purchase
-):
+async def track_stack_engagement(request: dict):
     """Track user engagement with outcome stacks for data feedback loop."""
+    stack_id = request.get("stack_id")
+    action = request.get("action")  # view, explore, add_to_cart, purchase
+    
+    if not stack_id or not action:
+        raise HTTPException(status_code=400, detail="Missing stack_id or action")
+    
     engagement = {
         "stack_id": stack_id,
         "action": action,

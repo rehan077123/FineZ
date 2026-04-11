@@ -84,7 +84,7 @@ const ProductCard = ({ product }) => {
       <div 
         data-testid={`product-card-${product.id}`}
         className="product-card product-card-hover masonry-item animate-fade-in group cursor-pointer rounded-[24px]"
-        onClick={() => handleAffiliateLinkClick()}
+        onClick={() => navigate(`/product/${product.id}`)}
       >
         {/* Badges */}
         {product.premium && (

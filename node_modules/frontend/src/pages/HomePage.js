@@ -168,14 +168,14 @@ const HomePage = () => {
         <div className="relative mx-auto max-w-6xl px-4 text-center">
           {/* Trust badge */}
           <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm text-slate-200 backdrop-blur-md shadow-lg">
-            <Sparkles className="w-4 h-4 text-[#F59E0B]" />
+            <Sparkles className="w-4 h-4 text-[#D4AF37]" />
             The Operating System for Buying & Earning Decisions
           </div>
 
           {/* Main headline - Decision focus */}
           <h1 className="mx-auto mt-8 max-w-4xl text-4xl font-extrabold tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl">
             Make the Right Decision
-            <span className="block text-[#F59E0B]">Not Just Find Products</span>
+            <span className="block text-[#D4AF37]">Not Just Find Products</span>
           </h1>
 
           {/* Subheading - Problem focus */}
@@ -186,7 +186,7 @@ const HomePage = () => {
           {/* Natural Language Search - PRIMARY CTA */}
           <div className="mx-auto mt-12 max-w-4xl rounded-[28px] border border-white/10 bg-[#111827]/80 p-1.5 shadow-[0_40px_120px_rgba(15,23,42,0.25)] backdrop-blur-3xl">
             <div className="relative rounded-[24px] bg-[#0F172A]/95 px-6 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-              <Flashlight className="absolute left-6 top-1/2 h-5 w-5 -translate-y-1/2 text-[#F59E0B]" />
+              <Flashlight className="absolute left-6 top-1/2 h-5 w-5 -translate-y-1/2 text-[#D4AF37]" />
               <input
                 id="search-decision"
                 type="text"

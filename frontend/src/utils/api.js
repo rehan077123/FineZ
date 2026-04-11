@@ -120,6 +120,32 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` }
     });
     return response.data;
+  },
+
+  // Decision Engine - Outcome Stacks
+  getStacks: async () => {
+    const response = await axios.get(`${BACKEND_URL}/api/stacks/outcomes`);
+    return response.data;
+  },
+
+  getStackDetails: async (stackId) => {
+    const response = await axios.get(`${BACKEND_URL}/api/stacks/outcomes/${stackId}`);
+    return response.data;
+  },
+
+  trackEngagement: async (stackId, action) => {
+    const response = await axios.post(`${BACKEND_URL}/api/stacks/track-engagement`, {
+      stack_id: stackId,
+      action: action
+    });
+    return response.data;
+  },
+
+  getStacksAnalytics: async (token) => {
+    const response = await axios.get(`${BACKEND_URL}/api/admin/stacks/analytics`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
   }
 };
 

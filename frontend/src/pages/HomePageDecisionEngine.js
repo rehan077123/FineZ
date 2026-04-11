@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search, TrendingUp, Zap, ShieldCheck, Sparkles, ShoppingCart, Lightbulb, Package, ArrowRight, CheckCircle, AlertCircle, Target, Flashlight } from 'lucide-react';
+import { Search, TrendingUp, Zap, ShieldCheck, Sparkles, ShoppingCart, Lightbulb, Package, ArrowRight, CheckCircle, AlertCircle, Target, Flashlight, Calendar, User, FileText } from 'lucide-react';
 import ProductCard from '@/components/ProductCard';
 import NewsletterModal from '@/components/NewsletterModal';
 import WhatsAppButton from '@/components/WhatsAppButton';
@@ -9,6 +9,7 @@ import { api } from '@/utils/api';
 const HomePage = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [discoverFeed, setDiscoverFeed] = useState(null);
+  const [blogPosts, setBlogPosts] = useState([]);
   const [stats, setStats] = useState({ total_listings: 0, total_vendors: 0, total_clicks: 0 });
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -101,12 +102,14 @@ const HomePage = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [discoverData, statsData] = await Promise.all([
+      const [discoverData, statsData, blogsData] = await Promise.all([
         api.getDiscoverFeed(12),
-        api.getStats()
+        api.getStats(),
+        api.getBlogs().catch(() => [])
       ]);
       setDiscoverFeed(discoverData);
       setStats(statsData);
+      setBlogPosts(Array.isArray(blogsData) ? blogsData : blogsData?.posts || []);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -149,6 +152,89 @@ const HomePage = () => {
         <div className="masonry-grid">
           {items.map((product) => (
             <ProductCard key={product.id} product={product} />
+          ))}
+        </div>
+      </section>
+    );
+  };
+
+  const renderBlogPosts = (title, posts, subtitle) => {
+    if (!posts || posts.length === 0) return null;
+    return (
+      <section className="max-w-7xl mx-auto px-4 mb-16">
+        <div className="mb-8">
+          <h2 className="text-4xl font-semibold text-white mb-2">{title}</h2>
+          {subtitle && <p className="text-slate-400">{subtitle}</p>}
+        </div>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {posts.map((post) => (
+            <article 
+              key={post.id || post.slug} 
+              className="glass-effect rounded-2xl overflow-hidden border border-white/10 hover:border-amber-400/30 transition-all group"
+            >
+              {/* Image */}
+              {post.image && (
+                <div className="relative h-40 overflow-hidden bg-gradient-to-br from-purple-900/20 to-amber-900/20">
+                  <img 
+                    src={post.image} 
+                    alt={post.title}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                </div>
+              )}
+              
+              {/* Content */}
+              <div className="p-6">
+                {/* Category Badge */}
+                {post.category && (
+                  <div className="inline-block mb-3">
+                    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      {post.category}
+                    </span>
+                  </div>
+                )}
+                
+                {/* Title */}
+                <h3 className="text-lg font-bold text-white mb-2 line-clamp-2 group-hover:text-amber-300 transition-colors">
+                  {post.title}
+                </h3>
+                
+                {/* Excerpt */}
+                {post.excerpt && (
+                  <p className="text-slate-400 text-sm mb-4 line-clamp-2">
+                    {post.excerpt}
+                  </p>
+                )}
+                
+                {/* Meta */}
+                {(post.author || post.date) && (
+                  <div className="flex items-center space-x-3 text-xs text-slate-500 mb-4">
+                    {post.author && (
+                      <div className="flex items-center space-x-1">
+                        <User className="w-3 h-3" />
+                        <span>{post.author}</span>
+                      </div>
+                    )}
+                    {post.date && (
+                      <div className="flex items-center space-x-1">
+                        <Calendar className="w-3 h-3" />
+                        <span>{new Date(post.date).toLocaleDateString()}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Read More */}
+                <a 
+                  href={`/blog/${post.slug || post.id}`}
+                  className="inline-flex items-center space-x-2 text-amber-400 hover:text-amber-300 font-semibold text-sm transition-colors"
+                >
+                  <span>Read Article</span>
+                  <ArrowRight className="w-4 h-4" />
+                </a>
+              </div>
+            </article>
           ))}
         </div>
       </section>
@@ -328,6 +414,36 @@ const HomePage = () => {
             'Creator-Verified Stack',
             discoverFeed?.topPicksOfWeek?.slice(0, 6),
             'Trusted by creators who actually make money'
+          )}
+          {renderResults(
+            '🔗 Affiliate Opportunities',
+            discoverFeed?.affiliateIdeas?.slice(0, 6),
+            'High-converting products to promote and earn commission'
+          )}
+          {renderResults(
+            '📦 Dropshipping Ideas',
+            discoverFeed?.dropshippingIdeas?.slice(0, 6),
+            'Ready-to-sell products with proven demand'
+          )}
+          {renderBlogPosts(
+            '📚 Learn & Earn - Blog Articles',
+            blogPosts?.slice(0, 3),
+            'Expert guides on affiliate marketing, dropshipping, and side hustles'
+          )}
+          {renderResults(
+            'AI Tools Trending',
+            discoverFeed?.aiToolsTrending?.slice(0, 6),
+            'Latest AI tools optimized for creators + side hustles'
+          )}
+          {renderResults(
+            'Side Hustle Tools',
+            discoverFeed?.sideHustleTools?.slice(0, 6),
+            'Software and services to start earning this week'
+          )}
+          {renderResults(
+            'Amazon Hot Deals',
+            discoverFeed?.amazonHotDeals?.slice(0, 6),
+            'Best discounts on Amazon products with affiliate links'
           )}
         </>
       )}
