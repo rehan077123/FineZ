@@ -4,6 +4,7 @@ import ProductCard from '@/components/ProductCard';
 import NewsletterModal from '@/components/NewsletterModal';
 import WhatsAppButton from '@/components/WhatsAppButton';
 import TestimonialSlider from '@/components/TestimonialSlider';
+import PlatformsModal from '@/components/PlatformsModal';
 import { api } from '@/utils/api';
 
 const HomePage = () => {
@@ -13,6 +14,7 @@ const HomePage = () => {
   const [stats, setStats] = useState({ total_listings: 0, total_vendors: 0, total_clicks: 0 });
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [selectedStackForPlatforms, setSelectedStackForPlatforms] = useState(null);
 
   // Outcome stacks - the decision engine options
   const OUTCOME_STACKS = [
@@ -370,7 +372,10 @@ const HomePage = () => {
                     </div>
 
                     {/* CTA */}
-                    <button className="btn-opportunity w-full flex items-center justify-center gap-2 group-hover:gap-3 transition-all">
+                    <button 
+                      onClick={() => setSelectedStackForPlatforms(stack)}
+                      className="btn-opportunity w-full flex items-center justify-center gap-2 group-hover:gap-3 transition-all"
+                    >
                       Explore Stack
                       <ArrowRight className="w-4 h-4" />
                     </button>
@@ -450,6 +455,15 @@ const HomePage = () => {
 
       {/* Testimonials */}
       <TestimonialSlider />
+
+      {/* Platforms Modal */}
+      {selectedStackForPlatforms && (
+        <PlatformsModal
+          stackId={selectedStackForPlatforms.id}
+          stackTitle={selectedStackForPlatforms.title}
+          onClose={() => setSelectedStackForPlatforms(null)}
+        />
+      )}
     </div>
   );
 };

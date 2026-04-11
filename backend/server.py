@@ -1302,6 +1302,65 @@ async def get_outcome_stack_details(stack_id: str, limit: int = Query(12, ge=1, 
         }
     }
 
+@api_router.get("/stacks/outcomes/{stack_id}/platforms")
+async def get_stack_platforms_with_affiliates(stack_id: str):
+    """Get all platforms/tools for a stack with affiliate link availability."""
+    # Map stack to relevant platforms with affiliate info
+    stack_platforms = {
+        "dropshipping-2026": [
+            {"name": "Shopify", "category": "Ecommerce Platform", "has_affiliate": True, "affiliate_url": "https://www.shopify.com/", "commission": "Variable", "description": "Create your store in minutes"},
+            {"name": "AliExpress", "category": "Supplier", "has_affiliate": True, "affiliate_url": "https://aliexpress.com/", "commission": "Up to 8%", "description": "Find dropshipping products"},
+            {"name": "Winning Dropshipping", "category": "Supplier", "has_affiliate": True, "affiliate_url": "https://www.winning.com/", "commission": "Variable", "description": "Curated winning products"},
+            {"name": "Oberlo", "category": "Integration Tool", "has_affiliate": True, "affiliate_url": "https://oberlo.com/", "commission": "Variable", "description": "Shopify dropshipping app"},
+            {"name": "Printful", "category": "Print-on-Demand", "has_affiliate": True, "affiliate_url": "https://www.printful.com/", "commission": "Up to 20%", "description": "Print custom products"},
+        ],
+        "ai-creator-stack": [
+            {"name": "ChatGPT Plus", "category": "AI Writing", "has_affiliate": True, "affiliate_url": "https://openai.com/", "commission": "Referral bonus", "description": "AI script generation"},
+            {"name": "D-ID", "category": "Video Avatar", "has_affiliate": True, "affiliate_url": "https://www.d-id.com/", "commission": "Up to 30%", "description": "Create talking avatars"},
+            {"name": "RunwayML", "category": "Video Generation", "has_affiliate": True, "affiliate_url": "https://runway.com/", "commission": "Up to 20%", "description": "AI video creation"},
+            {"name": "Synthesia", "category": "Video Generation", "has_affiliate": True, "affiliate_url": "https://www.synthesia.io/", "commission": "Variable", "description": "AI-powered video generator"},
+            {"name": "Canva Pro", "category": "Design", "has_affiliate": True, "affiliate_url": "https://www.canva.com/", "commission": "Up to 30%", "description": "Design graphics & posts"},
+        ],
+        "affiliate-mastery": [
+            {"name": "Amazon Associates", "category": "Affiliate Network", "has_affiliate": True, "affiliate_url": "https://associates.amazon.com/", "commission": "3-10%", "description": "Largest affiliate network"},
+            {"name": "SkimLinks", "category": "Affiliate Network", "has_affiliate": True, "affiliate_url": "https://skimlinks.com/", "commission": "Variable", "description": "Shopping affiliate network"},
+            {"name": "CJ Affiliate (Conversant)", "category": "Affiliate Network", "has_affiliate": True, "affiliate_url": "https://cjaffiliate.com/", "commission": "Variable", "description": "Performance marketing platform"},
+            {"name": "Flipkart Affiliate", "category": "Affiliate Network", "has_affiliate": True, "affiliate_url": "https://affiliate.flipkart.com/", "commission": "4-30%", "description": "India's biggest ecommerce"},
+            {"name": "ShareASale", "category": "Affiliate Network", "has_affiliate": True, "affiliate_url": "https://www.shareasale.com/", "commission": "Variable", "description": "Diverse merchant network"},
+        ],
+        "youtube-automation": [
+            {"name": "YouTube Studio", "category": "Platform", "has_affiliate": False, "affiliate_url": "https://studio.youtube.com/", "commission": "N/A", "description": "Video hosting & monetization"},
+            {"name": "CapCut", "category": "Video Editing", "has_affiliate": True, "affiliate_url": "https://www.capcut.com/", "commission": "Up to 20%", "description": "Easy video editing"},
+            {"name": "Synthesia", "category": "AI Video", "has_affiliate": True, "affiliate_url": "https://www.synthesia.io/", "commission": "Variable", "description": "Create faceless videos"},
+            {"name": "Descript", "category": "Video Editing", "has_affiliate": True, "affiliate_url": "https://www.descript.com/", "commission": "Up to 20%", "description": "AI-powered editing"},
+            {"name": "VidIQ", "category": "SEO Tool", "has_affiliate": True, "affiliate_url": "https://vidiq.com/", "commission": "Up to 30%", "description": "YouTube optimization"},
+        ],
+        "budget-office-setup": [
+            {"name": "Amazon", "category": "Shopping", "has_affiliate": True, "affiliate_url": "https://amazon.in/", "commission": "3-10%", "description": "Laptops, desks, chairs"},
+            {"name": "Flipkart", "category": "Shopping", "has_affiliate": True, "affiliate_url": "https://flipkart.com/", "commission": "4-30%", "description": "Electronics & furniture"},
+            {"name": "Ikea", "category": "Furniture", "has_affiliate": True, "affiliate_url": "https://www.ikea.com/", "commission": "5-8%", "description": "Affordable comfortable furniture"},
+            {"name": "Decathlon", "category": "Sports Gear", "has_affiliate": False, "affiliate_url": "https://www.decathlon.in/", "commission": "N/A", "description": "Equipment and accessories"},
+        ],
+        "gym-transformation": [
+            {"name": "Amazon", "category": "Shopping", "has_affiliate": True, "affiliate_url": "https://amazon.in/", "commission": "3-10%", "description": "Dumbbells, bars, machines"},
+            {"name": "Flipkart", "category": "Shopping", "has_affiliate": True, "affiliate_url": "https://flipkart.com/", "commission": "4-30%", "description": "Fitness equipment"},
+            {"name": "MuscleBlaze", "category": "Supplements", "has_affiliate": True, "affiliate_url": "https://www.muscleblaze.com/", "commission": "Up to 20%", "description": "Protein & supplements"},
+            {"name": "ON (Optimum Nutrition)", "category": "Supplements", "has_affiliate": True, "affiliate_url": "https://www.optimumnutrition.com/", "commission": "Variable", "description": "Premium supplements"},
+        ]
+    }
+    
+    platforms = stack_platforms.get(stack_id, [])
+    
+    if not platforms:
+        raise HTTPException(status_code=404, detail="Stack not found")
+    
+    return {
+        "stack_id": stack_id,
+        "platforms": platforms,
+        "total": len(platforms),
+        "with_affiliates": sum(1 for p in platforms if p.get("has_affiliate"))
+    }
+
 @api_router.post("/stacks/track-engagement")
 async def track_stack_engagement(request: dict):
     """Track user engagement with outcome stacks for data feedback loop."""

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, Target, AlertCircle, Zap, TrendingUp } from 'lucide-react';
 import ProductCard from '@/components/ProductCard';
+import PlatformsModal from '@/components/PlatformsModal';
 import { api } from '@/utils/api';
 
 const STACK_DETAILS = {
@@ -103,6 +104,7 @@ const OutcomeStackPage = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showPlatformsModal, setShowPlatformsModal] = useState(false);
 
   const fetchStackDetails = useCallback(async () => {
     try {
@@ -235,6 +237,15 @@ const OutcomeStackPage = () => {
             <span className="ml-auto text-sm text-slate-400">{products.length} products</span>
           </div>
 
+          {/* Platforms Button */}
+          <button
+            onClick={() => setShowPlatformsModal(true)}
+            className="mb-6 w-full md:w-auto px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-semibold rounded-lg flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-amber-500/40"
+          >
+            <Zap size={18} />
+            View All Platforms & Affiliates
+          </button>
+
           {products.length > 0 ? (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {products.map((product) => (
@@ -263,6 +274,15 @@ const OutcomeStackPage = () => {
           </button>
         </section>
       </div>
+
+      {/* Platforms Modal */}
+      {showPlatformsModal && (
+        <PlatformsModal
+          stackId={stackId}
+          stackTitle={stack?.title}
+          onClose={() => setShowPlatformsModal(false)}
+        />
+      )}
     </div>
   );
 };
