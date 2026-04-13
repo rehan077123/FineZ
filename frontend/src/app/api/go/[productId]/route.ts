@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 // Real products with affiliate URLs
 const mockProducts = [
   { id: '1', name: 'Apple AirPods Pro', affiliate_url: 'https://amazon.in/Apple-AirPods-Pro-MLWK3HN-A/dp/B09JQJX3BY' },
