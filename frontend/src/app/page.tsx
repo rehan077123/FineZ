@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { Sparkles } from 'lucide-react';
 import { Metadata } from 'next';
 
 // export const metadata: Metadata = {
@@ -111,39 +112,13 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
-      {/* Newsletter Signup */}
-      <div className="bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border-b border-yellow-400/20">
-        <div className="container mx-auto px-4 py-8">
-          <div className="max-w-2xl mx-auto text-center">
-            <h3 className="text-2xl font-bold text-white mb-3">🎁 Get Exclusive Deals!</h3>
-            <p className="text-gray-300 mb-4">
-              Join 10,000+ smart earners. Get weekly money-making tips, exclusive discounts, and early access to new products.
-            </p>
-            <div className="flex gap-3 justify-center mb-4 flex-wrap">
-              <span className="text-sm text-gray-400">✓ Weekly curated product picks</span>
-              <span className="text-sm text-gray-400">✓ Exclusive deals & early access</span>
-              <span className="text-sm text-gray-400">✓ Money-making tips & strategies</span>
-            </div>
-            <div className="flex gap-2 max-w-md mx-auto">
-              <input
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="flex-1 px-4 py-2 rounded-lg bg-slate-800 text-white border border-slate-700 focus:border-yellow-400 focus:outline-none"
-              />
-              <button className="bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-bold px-6 py-2 rounded-lg transition">
-                Get Free Access
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 mt-2">No spam, unsubscribe anytime. We respect your privacy.</p>
-          </div>
-        </div>
-      </div>
-
       {/* Hero Section */}
       <div className="container mx-auto px-4 py-20">
         <div className="max-w-4xl mx-auto text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800/50 border border-slate-700 text-gray-300 text-sm mb-8">
+            <Sparkles className="w-4 h-4 text-yellow-400" />
+            <span>The Operating System for Buying & Earning Decisions</span>
+          </div>
           <h1 className="text-5xl lg:text-6xl font-bold text-white mb-2 leading-tight">
             Make the Right Decision
           </h1>

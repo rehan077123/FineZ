@@ -51,6 +51,19 @@ export function Navbar() {
             ))}
           </div>
 
+          {/* Right side actions */}
+          <div className="hidden md:flex items-center space-x-4 absolute right-0">
+            <Link href="/login" className="text-gray-300 hover:text-white text-sm font-medium px-3 py-2">
+              Login
+            </Link>
+            <Link href="/signup" className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+              Sign Up
+            </Link>
+            <Link href="/list-product" className="text-gray-300 hover:text-white text-sm font-medium flex items-center gap-1">
+              + List Product
+            </Link>
+          </div>
+
           {/* Mobile menu button */}
           <button
             onClick={() => setIsOpen(!isOpen)}
