@@ -62,7 +62,7 @@
     "typescript": "^5.4.0"
   },
   "engines": {
-    "node": ">=18"
+    "node": "18.x"
   },
   "resolutions": {
     "glob": "^10.3.10",
