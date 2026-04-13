@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, Button, Badge } from "@/components/ui";
+import { Card, Button, Badge, Spinner } from "@/components/ui";
 import { useWishlist } from "@/lib/hooks";
 import { Trash2, ShoppingCart, Share2 } from "lucide-react";
 import Link from "next/link";

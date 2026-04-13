@@ -20,7 +20,7 @@ interface UseProductResult {
 }
 
 interface UseProductsResult {
-  products: Product[] | null;
+  products: { products: Product[]; total: number } | null;
   loading: boolean;
   error: Error | null;
 }
@@ -30,7 +30,7 @@ export function useProducts(
   limit: number = 20,
   offset: number = 0
 ): UseProductsResult {
-  const [products, setProducts] = useState<Product[] | null>(null);
+  const [products, setProducts] = useState<{ products: Product[]; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 

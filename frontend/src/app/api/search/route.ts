@@ -36,28 +36,11 @@ export async function POST(request: NextRequest) {
       results = results.filter(p => p.price <= filters.maxPrice);
     }
 
-    const { data: products, error } = await query_builder;
-
-    if (error) throw error;
-
-    // Log search for analytics
-    if (userId) {
-      await supabaseServer.from("searches").insert({
-        userId,
-        query,
-        results_count: products?.length || 0,
-        intent,
-      });
-    }
-
     const response = {
-      count: products?.length || 0,
-      results: products || [],
-      intent,
+      count: results.length,
+      results: results,
+      intent: 'search',
     };
-
-    // Cache for 1 hour
-    await redis.set(cacheKey, JSON.stringify(response), { ex: 3600 });
 
     return NextResponse.json(response);
   } catch (error) {

@@ -84,7 +84,7 @@ export default function SubscriptionPage() {
 
             <Button
               className="w-full mb-8"
-              variant={plan.current ? "outline" : "default"}
+              variant={plan.current ? "outline" : "primary"}
             >
               {plan.current ? "Current Plan" : "Upgrade"}
             </Button>

@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Mock comparison data
-    const mockProducts = {
+    const mockProducts: Record<string, any> = {
       1: {
         id: "1",
         name: "iPhone 15 Pro",
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     };
 
     const products = productIds
-      .map((id) => mockProducts[id as keyof typeof mockProducts])
+      .map((id) => mockProducts[id])
       .filter(Boolean);
 
     return NextResponse.json({

@@ -1,6 +1,6 @@
 "use client";
 
-import { ProductGrid } from "./product";
+import { ProductGrid } from "@/components/product";
 import { Spinner } from "@/components/ui";
 
 interface ResultsContainerProps {
