@@ -1,3 +1,7 @@
+import { defaultLocale, isValidLocale } from '@/lib/i18n-config';
+
+export const dynamicParams = false;
+
 export function generateStaticParams() {
   return [
     { locale: 'en' },
@@ -14,5 +18,10 @@ export default function LocaleLayout({
   children: React.ReactNode;
   params: { locale: string };
 }) {
+  // Validate locale
+  if (!isValidLocale(params.locale)) {
+    return null;
+  }
+
   return children;
 }
