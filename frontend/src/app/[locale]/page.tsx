@@ -101,8 +101,8 @@ const exampleQueries = [
   'best affiliate products in 2026',
 ];
 
-export default function Home() {
-  const [email, setEmail] = useState('');
+export default function HomePage() {
+  const [query, setQuery] = useState('');
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
