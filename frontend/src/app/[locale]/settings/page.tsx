@@ -128,35 +128,6 @@ export default function SettingsPage() {
           />
         </div>
       </Card>
-
-      {/* Security */}
-      <Card className="p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <Lock size={20} />
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-            Security
-          </h2>
-        </div>
-        <div className="space-y-4">
-          <Button variant="outline" className="w-full">
-            Change Password
-          </Button>
-          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-700/50 rounded-lg">
-            <span className="text-gray-900 dark:text-white">
-              Two-Factor Authentication
-            </span>
-            <Switch
-              checked={preferences.twoFactor}
-              onChange={(v) =>
-                setPreferences({
-                  ...preferences,
-                  twoFactor: v,
-                })
-              }
-            />
-          </div>
-        </div>
-      </Card>
     </div>
   );
 }
