@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseServer } from "@/config/supabase";
+import { getSupabaseServer, isSupabaseConfigured } from "@/config/supabase";
 import { redis } from "@/config/redis";
 
 export const dynamic = 'force-dynamic';
@@ -22,14 +22,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!supabaseServer) {
+    if (!isSupabaseConfigured()) {
       return NextResponse.json(
         { error: "Supabase not configured" },
         { status: 500 }
       );
     }
 
-    const { data, error } = await supabaseServer
+    const { data, error } = await getSupabaseServer()
       .from("price_alerts")
       .insert({
         userId,
@@ -74,14 +74,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(JSON.parse(cached as string));
     }
 
-    if (!supabaseServer) {
+    if (!isSupabaseConfigured()) {
       return NextResponse.json(
         { error: "Supabase not configured" },
         { status: 500 }
       );
     }
 
-    const { data: alerts, error } = await supabaseServer
+    const { data: alerts, error } = await getSupabaseServer()
       .from("price_alerts")
       .select("*")
       .eq("userId", userId)
