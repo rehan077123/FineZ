@@ -16,21 +16,6 @@
       "static/chunks/main-app.js",
       "static/chunks/app/marketplace/page.js"
     ],
-    "/affiliate/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/affiliate/page.js"
-    ],
-    "/[locale]/vendor/sell/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/[locale]/vendor/sell/page.js"
-    ],
-    "/dropship/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dropship/page.js"
-    ],
     "/_not-found/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
