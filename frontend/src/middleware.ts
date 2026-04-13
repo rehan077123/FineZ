@@ -7,15 +7,28 @@ export function middleware(request: NextRequest) {
   // Skip middleware for public routes and API
   if (
     pathname.startsWith('/api') ||
-    pathname === '/' ||
-    pathname === '/login' ||
-    pathname === '/signup' ||
     pathname.startsWith('/_next') ||
-    pathname.startsWith('/public')
+    pathname.startsWith('/public') ||
+    pathname === '/favicon.ico'
   ) {
     const response = NextResponse.next();
     addSecurityHeaders(response);
     return response;
+  }
+
+  // Redirect root path to /en
+  if (pathname === '/') {
+    return NextResponse.redirect(new URL('/en', request.url));
+  }
+
+  // Redirect paths without locale to /en
+  const locales = ['en', 'hi', 'ta', 'bn'];
+  const pathnameHasLocale = locales.some(
+    (locale) => pathname.startsWith(`/${locale}/`) || pathname === `/${locale}`
+  );
+
+  if (!pathnameHasLocale && pathname !== '/') {
+    return NextResponse.redirect(new URL(`/en${pathname}`, request.url));
   }
 
   const response = NextResponse.next();
