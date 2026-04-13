@@ -3,10 +3,20 @@
 
 import { Redis } from "@upstash/redis";
 
-const redis = new Redis({
-  url: process.env.REDIS_URL || "",
-  token: process.env.REDIS_TOKEN || "",
-});
+// Lazy-initialized Redis client for rate limiting
+let redisClient: any = null;
+
+const getRedis = () => {
+  if (!redisClient) {
+    const url = process.env.REDIS_URL || "https://placeholder-redis.upstash.io";
+    const token = process.env.REDIS_TOKEN || "placeholder-token";
+    redisClient = new Redis({
+      url,
+      token,
+    });
+  }
+  return redisClient;
+};
 
 interface RateLimitConfig {
   interval: number; // Time window in seconds
@@ -21,6 +31,7 @@ export async function rateLimit(
   config: RateLimitConfig = { interval: 60, maxRequests: 100 }
 ) {
   try {
+    const redis = getRedis();
     const key = `rate-limit:${identifier}`;
     const current = await redis.incr(key);
 
@@ -53,6 +64,7 @@ export async function slidingWindowRateLimit(
   config: RateLimitConfig = { interval: 60, maxRequests: 100 }
 ) {
   try {
+    const redis = getRedis();
     const key = `rate-limit:sliding:${identifier}`;
     const now = Date.now();
     const windowStart = now - config.interval * 1000;

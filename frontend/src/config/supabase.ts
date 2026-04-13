@@ -3,15 +3,17 @@ import { CONFIG } from "./constants";
 
 // Helper to check if Supabase is properly configured
 export const isSupabaseConfigured = () => {
-  return !!CONFIG.SUPABASE_URL && !!CONFIG.SUPABASE_ANON_KEY;
+  const url = CONFIG.SUPABASE_URL || "";
+  return url.startsWith("http") && !!CONFIG.SUPABASE_ANON_KEY && CONFIG.SUPABASE_ANON_KEY !== "your_supabase_anon_key";
 };
 
 // Client-side Supabase client (lazy-initialized)
 let supabaseClient: any = null;
 export const getSupabase = () => {
   if (!supabaseClient) {
-    const url = CONFIG.SUPABASE_URL || "https://placeholder-url.supabase.co";
-    const key = CONFIG.SUPABASE_ANON_KEY || "placeholder-key";
+    // If not configured, use a safe dummy URL that won't crash during build
+    const url = isSupabaseConfigured() ? CONFIG.SUPABASE_URL! : "https://placeholder.supabase.co";
+    const key = isSupabaseConfigured() ? CONFIG.SUPABASE_ANON_KEY! : "placeholder-key";
     supabaseClient = createClient(url, key);
   }
   return supabaseClient;
@@ -21,7 +23,8 @@ export const getSupabase = () => {
 let supabaseServerClient: any = null;
 export const getSupabaseServer = () => {
   if (!supabaseServerClient) {
-    const url = CONFIG.SUPABASE_URL || "https://placeholder-url.supabase.co";
+    // If not configured, use a safe dummy URL that won't crash during build
+    const url = isSupabaseConfigured() ? CONFIG.SUPABASE_URL! : "https://placeholder.supabase.co";
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder-key";
     supabaseServerClient = createClient(url, key, {
       auth: {
@@ -33,7 +36,5 @@ export const getSupabaseServer = () => {
   return supabaseServerClient;
 };
 
-// Re-export constants for backward compatibility if needed
-// But we should use the functions to avoid top-level side effects during build
-export const supabase = (typeof window !== 'undefined') ? getSupabase() : null;
-export const supabaseServer = (typeof window === 'undefined') ? getSupabaseServer() : null;
+// REMOVED: Top-level supabase and supabaseServer constants to prevent build-time crashes.
+// Use getSupabase() or getSupabaseServer() instead.

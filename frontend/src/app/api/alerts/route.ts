@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServer, isSupabaseConfigured } from "@/config/supabase";
-import { redis } from "@/config/redis";
+import { getRedis } from "@/config/redis";
 
 export const dynamic = 'force-dynamic';
 
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     if (error) throw error;
 
     // Invalidate user's alerts cache
-    await redis.del(`alerts:${userId}`);
+    await getRedis().del(`alerts:${userId}`);
 
     return NextResponse.json(data, { status: 201 });
   } catch (error) {
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Check cache
-    const cached = await redis.get(`alerts:${userId}`);
+    const cached = await getRedis().get(`alerts:${userId}`);
     if (cached) {
       return NextResponse.json(JSON.parse(cached as string));
     }
@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
     if (error) throw error;
 
     // Cache for 1 hour
-    await redis.set(`alerts:${userId}`, JSON.stringify(alerts), { ex: 3600 });
+    await getRedis().set(`alerts:${userId}`, JSON.stringify(alerts), { ex: 3600 });
 
     return NextResponse.json(alerts);
   } catch (error) {

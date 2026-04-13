@@ -1,16 +1,25 @@
 import { Redis } from "@upstash/redis";
 import { CONFIG } from "./constants";
 
-// Initialize Upstash Redis client
-export const redis = new Redis({
-  url: CONFIG.REDIS_URL!,
-  token: CONFIG.REDIS_TOKEN!,
-});
+// Lazy-initialized Redis client
+let redisClient: any = null;
+
+export const getRedis = () => {
+  if (!redisClient) {
+    const url = CONFIG.REDIS_URL || "https://placeholder-redis.upstash.io";
+    const token = CONFIG.REDIS_TOKEN || "placeholder-token";
+    redisClient = new Redis({
+      url,
+      token,
+    });
+  }
+  return redisClient;
+};
 
 // Cache helpers
 export async function getCached(key: string) {
   try {
-    return await redis.get(key);
+    return await getRedis().get(key);
   } catch (error) {
     console.error("Redis get error:", error);
     return null;
@@ -23,7 +32,7 @@ export async function setCached(
   ttl: number = 3600
 ) {
   try {
-    await redis.setex(key, ttl, JSON.stringify(value));
+    await getRedis().setex(key, ttl, JSON.stringify(value));
   } catch (error) {
     console.error("Redis set error:", error);
   }
@@ -31,7 +40,7 @@ export async function setCached(
 
 export async function deleteCached(key: string) {
   try {
-    await redis.del(key);
+    await getRedis().del(key);
   } catch (error) {
     console.error("Redis delete error:", error);
   }
