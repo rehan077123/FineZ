@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/config/supabase";
 import { redis } from "@/config/redis";
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Price alerts - set/get/delete price alerts
  * POST /api/alerts - Create alert
@@ -17,6 +19,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
+      );
+    }
+
+    if (!supabaseServer) {
+      return NextResponse.json(
+        { error: "Supabase not configured" },
+        { status: 500 }
       );
     }
 
@@ -63,6 +72,13 @@ export async function GET(request: NextRequest) {
     const cached = await redis.get(`alerts:${userId}`);
     if (cached) {
       return NextResponse.json(JSON.parse(cached as string));
+    }
+
+    if (!supabaseServer) {
+      return NextResponse.json(
+        { error: "Supabase not configured" },
+        { status: 500 }
+      );
     }
 
     const { data: alerts, error } = await supabaseServer
