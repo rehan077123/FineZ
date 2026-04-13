@@ -16,10 +16,10 @@
       "static/chunks/main-app.js",
       "static/chunks/app/marketplace/page.js"
     ],
-    "/_not-found/page": [
+    "/dropship/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/_not-found/page.js"
+      "static/chunks/app/dropship/page.js"
     ]
   }
 }
