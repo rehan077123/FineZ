@@ -1,0 +1,8 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/page": "app/page.js",
+  "/affiliate/page": "app/affiliate/page.js",
+  "/marketplace/page": "app/marketplace/page.js",
+  "/[locale]/vendor/sell/page": "app/[locale]/vendor/sell/page.js",
+  "/dropship/page": "app/dropship/page.js"
+}

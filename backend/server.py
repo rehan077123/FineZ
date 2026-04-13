@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, Header, UploadFile, File, Body, Response
+from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, Header, UploadFile, File, Body, Response, Path
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -9,9 +9,9 @@ import math
 import re
 import requests
 from urllib.parse import urlparse
-from pathlib import Path
+from pathlib import Path as PathlibPath
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 import jwt
@@ -21,6 +21,8 @@ import base64
 import re
 import requests
 from amazon_service import AmazonService, AMAZON_AFFILIATE_TAG
+from rainforest_service import RainforestService, fetch_product_async, search_products_async
+from anthropic_service import AnthropicService
 from io import BytesIO
 from providers.registry import list_providers, get_provider
 
@@ -46,7 +48,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-ROOT_DIR = Path(__file__).parent
+ROOT_DIR = PathlibPath(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
 # JWT Configuration
@@ -672,6 +674,10 @@ def _normalize_product_doc(product: dict) -> dict:
     affiliate_network = product.get("affiliate_network") or ""
     affiliate_link = product.get("affiliate_link") or product.get("affiliateLink") or product.get("affiliateUrl") or ""
 
+    # Generate affiliate link from ASIN if not already present
+    if asin and not affiliate_link:
+        affiliate_link = AmazonService.generate_affiliate_link(asin)
+
     provider = product.get("provider")
     if not provider:
         if asin or affiliate_network.lower() == "amazon" or "amazon." in affiliate_link.lower():
@@ -734,6 +740,7 @@ def _normalize_product_doc(product: dict) -> dict:
             "updatedAt": updated_at,
             "affiliateLink": affiliate_url,
             "affiliate_link": affiliate_url,
+            "link": affiliate_url,
             "image_url": product.get("image_url") or image,
             "review_count": product.get("review_count") or reviews_count,
         }
@@ -1942,6 +1949,108 @@ async def get_my_products(user_id: str = Depends(get_current_user)):
     return products
 
 
+@api_router.post("/vendor/products/upload")
+async def upload_vendor_product(
+    title: str = None,
+    description: str = None,
+    category: str = "Electronics",
+    affiliateLink: str = None,
+    affiliateNetwork: str = "Amazon Associates",
+    price: float = None,
+    originalPrice: float = None,
+    image: UploadFile = File(None),
+    type: str = "affiliate",
+    verified: str = "false",
+):
+    """
+    Public endpoint for vendors/affiliates to upload their products.
+    No authentication required - products marked as unverified until reviewed.
+    """
+    try:
+        # Validate required fields
+        if not all([title, description, affiliateLink, price]):
+            raise HTTPException(
+                status_code=400, 
+                detail="Missing required fields: title, description, affiliateLink, price"
+            )
+        
+        image_url = None
+        
+        # Handle image upload
+        if image:
+            if image.content_type not in ALLOWED_IMAGE_TYPES:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Invalid image type. Allowed: JPEG, PNG, WebP"
+                )
+            
+            # Read image
+            image_data = await image.read()
+            if len(image_data) > MAX_IMAGE_SIZE:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Image too large. Max size: 5MB"
+                )
+            
+            # Convert to base64 for MongoDB storage
+            image_base64 = base64.b64encode(image_data).decode('utf-8')
+            image_url = f"data:{image.content_type};base64,{image_base64}"
+        
+        # Create product document
+        product_id = str(uuid.uuid4())
+        product_dict = {
+            "id": product_id,
+            "title": title,
+            "description": description,
+            "category": category,
+            "type": type,
+            "affiliate_link": affiliateLink,
+            "affiliateLink": affiliateLink,
+            "affiliate_network": affiliateNetwork,
+            "price": float(price),
+            "original_price": float(originalPrice) if originalPrice else float(price),
+            "image": image_url or "https://via.placeholder.com/300x300?text=No+Image",
+            "image_url": image_url or "https://via.placeholder.com/300x300?text=No+Image",
+            "verified": verified.lower() == "true",
+            "featured": False,
+            "clicks": 0,
+            "rating": 0.0,
+            "review_count": 0,
+            "reviewsCount": 0,
+            "provider": "amazon" if "amazon" in affiliateLink.lower() else "affiliate",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "createdAt": datetime.now(timezone.utc).isoformat(),
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
+        }
+        
+        # Insert into database
+        result = await db.products.insert_one(product_dict)
+        
+        # Log vendor upload
+        await db.vendor_uploads.insert_one({
+            "product_id": product_id,
+            "uploaded_at": datetime.now(timezone.utc).isoformat(),
+            "title": title,
+            "affiliate_network": affiliateNetwork,
+            "status": "pending_review", 
+            "has_image": image is not None
+        })
+        
+        return {
+            "success": True,
+            "product_id": product_id,
+            "message": "Product uploaded successfully. It will appear on the marketplace once verified.",
+            "status": "pending_review"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading vendor product: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @api_router.post("/products/{product_id}/click")
 async def track_click(product_id: str):
     result = await db.products.update_one({"id": product_id}, {"$inc": {"clicks": 1}})
@@ -2795,9 +2904,343 @@ async def startup_tasks():
         asyncio.create_task(_amazon_auto_sync_loop())
 
 
+# ==================== RAINFOREST API ROUTES ====================
+
+@api_router.get("/products/rainforest/asin/{asin}")
+async def get_product_from_rainforest(
+    asin: str = Path(..., description="Amazon Standard Identification Number"),
+    domain: str = Query("amazon.in", description="Amazon domain (e.g., amazon.in, amazon.com)")
+):
+    """
+    Fetch product data from Amazon using Rainforest API by ASIN.
+    
+    Query Parameters:
+    - asin: Product's ASIN
+    - domain: Amazon domain (default: amazon.in)
+    
+    Example: /api/products/rainforest/asin/B073JYC4XM?domain=amazon.in
+    """
+    try:
+        product_data = RainforestService.get_product_by_asin(asin, domain)
+        
+        if not product_data:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Product with ASIN {asin} not found or API request failed"
+            )
+        
+        # Transform to FineZ format
+        transformed = RainforestService.transform_product_data(product_data)
+        
+        return {
+            "success": True,
+            "data": transformed,
+            "raw_data": product_data,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching product from Rainforest API: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/products/rainforest/search")
+async def search_amazon_products(
+    query: str = Query(..., description="Search query"),
+    domain: str = Query("amazon.in", description="Amazon domain"),
+    page: int = Query(1, description="Page number (1-indexed)"),
+    sort_by: str = Query("RELEVANCE", description="Sort option: RELEVANCE, LOWEST_PRICE, HIGHEST_PRICE, NEWEST, RATING_HIGH_TO_LOW")
+):
+    """
+    Search for products on Amazon using Rainforest API.
+    
+    Query Parameters:
+    - query: Search query (required)
+    - domain: Amazon domain (default: amazon.in)
+    - page: Page number for pagination (default: 1)
+    - sort_by: Sort by relevance, price, rating, etc.
+    
+    Example: /api/products/rainforest/search?query=microSD+card&domain=amazon.in&page=1
+    """
+    try:
+        if not query or len(query.strip()) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail="Search query must be at least 2 characters long"
+            )
+        
+        results = RainforestService.search_products(query, domain, page, sort_by)
+        
+        if results is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Search API request failed"
+            )
+        
+        # Transform results
+        transformed_results = [
+            RainforestService.transform_product_data(product)
+            for product in results
+        ] if isinstance(results, list) else []
+        
+        return {
+            "success": True,
+            "query": query,
+            "page": page,
+            "count": len(transformed_results),
+            "results": transformed_results,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error searching Rainforest API: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.get("/rainforest/credits")
+async def get_rainforest_credits():
+    """
+    Check remaining Rainforest API credits for current API key.
+    
+    Example: /api/rainforest/credits
+    """
+    try:
+        credits = RainforestService.get_api_credits()
+        
+        if not credits:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to retrieve credit information"
+            )
+        
+        return {
+            "success": True,
+            "credits": credits,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error checking Rainforest API credits: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== ANTHROPIC AI ROUTES ====================
+
+# Initialize Anthropic service
+anthropic_service = AnthropicService()
+
+
+@api_router.post("/ai/parse-intent")
+async def parse_search_intent(
+    query: str = Query(..., description="Search query to analyze"),
+    user_id: Optional[str] = Query(None, description="Optional user ID for personalization")
+):
+    """
+    Parse user search query to extract intent using Claude AI.
+    
+    Analyzes what user really wants: category, intent, entities, modifiers.
+    
+    Query Parameters:
+    - query: Search query string (required)
+    - user_id: Optional user ID for personalized analysis
+    
+    Example: /api/ai/parse-intent?query=best+budget+android+phones+under+20000
+    """
+    try:
+        context = None
+        if user_id:
+            # Could fetch user history here
+            context = {"user_id": user_id}
+        
+        result = anthropic_service.parse_search_intent(query, context)
+        
+        return {
+            "success": True,
+            "data": result,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error parsing search intent: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/ai/recommendations")
+async def get_recommendations(
+    interests: List[str] = Query(..., description="List of user interests"),
+    budget_min: Optional[float] = Query(None),
+    budget_max: Optional[float] = Query(None),
+    user_id: Optional[str] = Query(None)
+):
+    """
+    Generate personalized product recommendations using Claude AI.
+    
+    Query Parameters:
+    - interests: List of interests (e.g., ["tech", "productivity", "gaming"])
+    - budget_min: Optional minimum budget in INR
+    - budget_max: Optional maximum budget in INR
+    - user_id: Optional user ID for history
+    
+    Example: /api/ai/recommendations?interests=tech&interests=productivity&budget_min=5000&budget_max=50000
+    """
+    try:
+        budget_range = None
+        if budget_min is not None and budget_max is not None:
+            budget_range = (budget_min, budget_max)
+        
+        history = None
+        if user_id:
+            # Could fetch user purchase history here
+            pass
+        
+        result = anthropic_service.generate_product_recommendations(interests, budget_range, history)
+        
+        return {
+            "success": True,
+            "data": result,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error generating recommendations: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/ai/compare-products")
+async def compare_products(
+    products: List[Dict[str, Any]] = Body(..., description="List of products to compare")
+):
+    """
+    Generate detailed product comparison analysis.
+    
+    Request Body:
+    [
+        {
+            "title": "Product 1",
+            "price": 5000,
+            "rating": 4.5,
+            "features": ["feature1", "feature2"],
+            ...
+        },
+        ...
+    ]
+    
+    Returns detailed comparison with pros/cons and recommendations.
+    """
+    try:
+        if not products or len(products) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail="At least 2 products required for comparison"
+            )
+        
+        result = anthropic_service.compare_products(products)
+        
+        return {
+            "success": True,
+            "data": result,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error comparing products: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/ai/generate-description")
+async def generate_description(
+    title: str = Query(...),
+    category: str = Query(...),
+    features: List[str] = Query(...),
+    price: Optional[float] = Query(None)
+):
+    """
+    Generate engaging product description using Claude AI.
+    
+    Query Parameters:
+    - title: Product title (required)
+    - category: Product category (required)
+    - features: Product features (required, can be multiple)
+    - price: Optional product price
+    
+    Example: /api/ai/generate-description?title=iPhone+15+Pro&category=Electronics&features=5G&features=Camera&price=79999
+    """
+    try:
+        result = anthropic_service.generate_product_description(title, category, features, price)
+        
+        return {
+            "success": True,
+            "data": result,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error generating description: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/ai/answer-question")
+async def answer_question(
+    question: str = Query(..., description="Customer question"),
+    product_id: Optional[str] = Query(None)
+):
+    """
+    Answer user questions about products using Claude AI.
+    
+    Query Parameters:
+    - question: Customer's question (required)
+    - product_id: Optional product ID for context
+    
+    Example: /api/ai/answer-question?question=Is+this+phone+good+for+photography?
+    """
+    try:
+        product_context = None
+        if product_id:
+            # Could fetch product details here
+            pass
+        
+        result = anthropic_service.answer_product_question(question, product_context)
+        
+        return {
+            "success": True,
+            "data": result,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error answering question: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@api_router.post("/ai/analyze-sentiment")
+async def analyze_sentiment(
+    text: str = Query(..., description="Text to analyze (review, feedback, etc.)")
+):
+    """
+    Analyze sentiment from user text (reviews, feedback, messages).
+    
+    Query Parameters:
+    - text: Text to analyze (required)
+    
+    Returns sentiment, emotions, key topics, and insights.
+    
+    Example: /api/ai/analyze-sentiment?text=This+product+is+amazing!+Fast+delivery+too
+    """
+    try:
+        result = anthropic_service.analyze_user_sentiment(text)
+        
+        return {
+            "success": True,
+            "data": result,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error analyzing sentiment: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 app.include_router(api_router, prefix="/api")
 
-app.get("/health")
+@app.get("/health")
 async def health_check():
     return {"status": "healthy", "database": "connected" if client else "disconnected"}
 

@@ -1,0 +1,87 @@
+import { NextRequest, NextResponse } from "next/server";
+import { supabaseServer } from "@/config/supabase";
+import { redis } from "@/config/redis";
+
+/**
+ * Price alerts - set/get/delete price alerts
+ * POST /api/alerts - Create alert
+ * GET /api/alerts?userId=xxx - Get user alerts
+ * DELETE /api/alerts/[id] - Delete alert
+ */
+
+export async function POST(request: NextRequest) {
+  try {
+    const { userId, productId, targetPrice, platform } = await request.json();
+
+    if (!userId || !productId || !targetPrice) {
+      return NextResponse.json(
+        { error: "Missing required fields" },
+        { status: 400 }
+      );
+    }
+
+    const { data, error } = await supabaseServer
+      .from("price_alerts")
+      .insert({
+        userId,
+        productId,
+        targetPrice,
+        platform: platform || "AMAZON",
+        isActive: true,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Invalidate user's alerts cache
+    await redis.del(`alerts:${userId}`);
+
+    return NextResponse.json(data, { status: 201 });
+  } catch (error) {
+    console.error("Alert creation error:", error);
+    return NextResponse.json(
+      { error: "Failed to create alert" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get("userId");
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: "userId is required" },
+        { status: 400 }
+      );
+    }
+
+    // Check cache
+    const cached = await redis.get(`alerts:${userId}`);
+    if (cached) {
+      return NextResponse.json(JSON.parse(cached as string));
+    }
+
+    const { data: alerts, error } = await supabaseServer
+      .from("price_alerts")
+      .select("*")
+      .eq("userId", userId)
+      .eq("isActive", true);
+
+    if (error) throw error;
+
+    // Cache for 1 hour
+    await redis.set(`alerts:${userId}`, JSON.stringify(alerts), { ex: 3600 });
+
+    return NextResponse.json(alerts);
+  } catch (error) {
+    console.error("Alerts fetch error:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch alerts" },
+      { status: 500 }
+    );
+  }
+}
