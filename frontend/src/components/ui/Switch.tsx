@@ -12,7 +12,7 @@ export const Switch = React.forwardRef<HTMLInputElement, SwitchProps>(
           <input
             ref={ref}
             type="checkbox"
-            className="hidden"
+            className="peer hidden"
             {...props}
           />
           <div className="relative w-11 h-6 bg-gray-300 rounded-full transition-colors peer-checked:bg-blue-600 dark:bg-slate-600 dark:peer-checked:bg-blue-500">

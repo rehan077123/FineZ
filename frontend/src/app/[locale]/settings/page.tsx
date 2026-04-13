@@ -58,10 +58,10 @@ export default function SettingsPage() {
             </span>
             <Switch
               checked={preferences.emailNotifications}
-              onChange={(v) =>
+              onChange={(e) =>
                 setPreferences({
                   ...preferences,
-                  emailNotifications: v,
+                  emailNotifications: e.target.checked,
                 })
               }
             />
@@ -72,10 +72,10 @@ export default function SettingsPage() {
             </span>
             <Switch
               checked={preferences.pushNotifications}
-              onChange={(v) =>
+              onChange={(e) =>
                 setPreferences({
                   ...preferences,
-                  pushNotifications: v,
+                  pushNotifications: e.target.checked,
                 })
               }
             />
@@ -95,10 +95,34 @@ export default function SettingsPage() {
           <span className="text-gray-900 dark:text-white">Dark Mode</span>
           <Switch
             checked={preferences.darkMode}
-            onChange={(v) =>
+            onChange={(e) =>
               setPreferences({
                 ...preferences,
-                darkMode: v,
+                darkMode: e.target.checked,
+              })
+            }
+          />
+        </div>
+      </Card>
+
+      {/* Security */}
+      <Card className="p-6 mb-6">
+        <div className="flex items-center gap-3 mb-4">
+          <Lock size={20} />
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+            Security
+          </h2>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-gray-900 dark:text-white">
+            Two-Factor Authentication
+          </span>
+          <Switch
+            checked={preferences.twoFactor}
+            onChange={(e) =>
+              setPreferences({
+                ...preferences,
+                twoFactor: e.target.checked,
               })
             }
           />
