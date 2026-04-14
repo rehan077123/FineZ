@@ -53,6 +53,9 @@
   "homepage": "https://github.com/rehan077123/FineZ.#readme",
   "devDependencies": {
     "@babel/core": "^7.24.0",
-    "acorn": "^8.11.3"
+    "acorn": "^8.11.3",
+    "cookie": "^0.7.2",
+    "next-auth": "^4.24.13",
+    "jose": "^5.2.3"
   }
 }
