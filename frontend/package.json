@@ -64,7 +64,7 @@
   "engines": {
     "node": "20.x"
   },
-  "resolutions": {
+  "overrides": {
     "glob": "^10.3.10",
     "workbox-webpack-plugin": "^6.5.4",
     "rimraf": "^3.0.2",
