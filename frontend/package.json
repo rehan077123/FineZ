@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.0",
+    "@parcel/watcher": "^2.5.6",
     "@radix-ui/react-accordion": "^1.2.8",
     "@radix-ui/react-alert-dialog": "^1.1.11",
     "@radix-ui/react-avatar": "^1.1.7",
@@ -74,5 +75,8 @@
     "rimraf": "^5.0.10",
     "globby": "^11.1.0",
     "pify": "^4.0.1"
+  },
+  "optionalDependencies": {
+    "@parcel/watcher-linux-x64-glibc": "^2.5.6"
   }
 }
